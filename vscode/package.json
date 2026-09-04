@@ -1,0 +1,94 @@
+{
+  "name": "vscode-raycast-bridge",
+  "displayName": "Raycast Bridge",
+  "description": "Run Raycast commands and Raycast AI from VSCode.",
+  "version": "0.0.1",
+  "publisher": "yinnnyou",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.96.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "raycastBridge.askAI",
+        "title": "Ask AI",
+        "category": "Raycast"
+      },
+      {
+        "command": "raycastBridge.runCommand",
+        "title": "Run Command",
+        "category": "Raycast"
+      }
+    ],
+    "configuration": {
+      "title": "Raycast Bridge",
+      "properties": {
+        "raycastBridge.owner": {
+          "type": "string",
+          "default": "Youyinnn",
+          "description": "Your Raycast Store handle. Used as the <author-or-owner> segment of raycast:// deeplinks."
+        },
+        "raycastBridge.model": {
+          "type": "string",
+          "default": "",
+          "description": "Raycast AI model id. Leave empty to use the Raycast default."
+        },
+        "raycastBridge.creativity": {
+          "type": "string",
+          "default": "none",
+          "enum": [
+            "none",
+            "low",
+            "medium",
+            "high",
+            "maximum"
+          ],
+          "description": "Raycast AI creativity level."
+        },
+        "raycastBridge.commands": {
+          "type": "array",
+          "default": [],
+          "description": "Raycast commands to offer in 'Raycast: Run Command'. Get a deeplink via the Copy Deeplink action in Raycast root search.",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "deeplink"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "deeplink": {
+                "type": "string"
+              },
+              "passSelectionAs": {
+                "type": "string",
+                "description": "How to inject the editor selection: 'fallbackText', 'argument:<name>', or 'context:<key>'."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node20",
+    "watch": "npm run build -- --sourcemap --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "@types/vscode": "^1.96.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.0"
+  }
+}

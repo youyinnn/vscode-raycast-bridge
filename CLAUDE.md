@@ -1,0 +1,100 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+# VSCode side
+cd vscode
+npm run typecheck                       # tsc --noEmit
+npm test                                # vitest run (15 tests, no VSCode host needed)
+npx vitest run src/bridge/server.test.ts # single file
+npx vitest run -t "rejects a browser"    # single test by name
+npm run build                            # esbuild bundle -> dist/extension.js
+npm run watch                            # rebuild on change
+
+# Raycast side
+cd raycast
+npx tsc --noEmit
+npx ray lint                             # validates manifest; hits the live Raycast Store API
+npx ray develop                          # builds and imports the extension into Raycast
+```
+
+`ray develop` only needs to run once to import. The extension stays registered in Raycast
+after the process exits, so no terminal needs to stay open to use the bridge.
+
+There is no automated end-to-end test: exercising the real chain requires a running Raycast
+with a Pro account. Drive it manually by registering a job on a `BridgeServer` and firing the
+deeplink (see the data flow below). Each run consumes real AI quota.
+
+## Architecture
+
+Two independent npm packages, deliberately not a workspace (npm workspaces confuse `ray`'s
+assumptions about extension directory layout).
+
+The shape of this repo follows from three external constraints, all verified against Raycast
+1.104.x. Do not redesign around them without re-checking:
+
+1. **Raycast exposes no API to external processes.** `raycast://` deeplinks are the only
+   supported entry point. There is no CLI command to launch a command (`ray` only does
+   build/develop/lint/migrate/publish), no AppleScript dictionary, no REST API. The
+   WebSocket on `127.0.0.1:7265` is the private Browser Extension channel, not an entry point.
+2. **Deeplinks are one-way with no return value.** Anything that needs a result requires a
+   return path built by hand.
+3. **Raycast unloads command processes as soon as they finish.** It cannot host a long-lived
+   server. The VSCode extension host can, so the server lives on the VSCode side and Raycast
+   connects back into it.
+
+Resulting data flow:
+
+```
+VSCode  register job in BridgeServer, listen on ephemeral loopback port
+        │
+        ├─ open -g "raycast://extensions/<owner>/vscode-bridge/ask-ai
+        │            ?launchType=background&context={jobId,port,token}"
+        ▼
+Raycast ask-ai (no-view) reads props.launchContext
+        ├─ GET  /job/<id>          fetch the prompt
+        ├─ POST /job/<id>/chunk    stream AI.ask output, batched every 120ms
+        └─ POST /job/<id>/done     { ok: true } | { ok: false, error }
+```
+
+Only `{jobId, port, token}` travels through the URL (~200 bytes); the prompt and the answer
+go over HTTP, which sidesteps URL length limits and makes streaming possible.
+
+## Invariants
+
+- **`vscode/src/bridge/server.ts` must not import `vscode`.** Its tests drive it with a real
+  HTTP client; adding a `vscode` import would force mocking and kill that.
+- **Pure deeplink logic belongs in `vscode/src/bridge/`, not `features/`.** `withSelection`
+  originally lived in `features/runCommand.ts`; testing it there needed a `vscode` mock that
+  passed vitest but failed `tsc`. Keep vscode-facing code and pure logic separated.
+- **`protocol.ts` is duplicated by hand** in `vscode/src/bridge/` and `raycast/src/`. Changing
+  the wire contract means editing both.
+- **Fire deeplinks with `open`, never `vscode.env.openExternal`.** VSCode documents scheme
+  support only for `http`/`https`/`mailto`/`vscode`, and `vscode.Uri.parse` re-encodes the
+  query string, corrupting the already-encoded `context` payload.
+
+## Gotchas
+
+- **A dev extension's deeplink identity is locked at first import.** Changing `author` in
+  `raycast/package.json` and re-running `ray develop` rebuilds the code but leaves Raycast
+  serving the original `<author>` segment, so deeplinks start failing with
+  "No enabled command found". Fix: remove the extension in Raycast, then `ray develop` again.
+  Keep `author` and the `raycastBridge.owner` config default in sync.
+- **`ray lint` validates `author` against the live Store API.** It needs network and a real
+  handle. This repo's handle is `Youyinnn`.
+- **Raycast AI quota is 10 requests/minute, 100/hour.** Manual chain testing burns it fast.
+- **`AI.Model` has 126 members.** `raycastBridge.model` is intentionally free-text rather than
+  a `package.json` enum, which would rot with every Raycast release.
+- **First deeplink of a given identity prompts for confirmation.** Choosing "Always" makes all
+  later launches silent; `launchType=background` alone does not skip the prompt.
+
+## Security model
+
+The loopback server is reachable by any local process, so `server.ts` enforces: bind
+`127.0.0.1` only, OS-assigned ephemeral port, per-session random token compared with
+`timingSafeEqual`, rejection of any request carrying an `Origin` header (Raycast's own fetch
+sends none, so this only blocks browsers), and job deletion on completion with a 5-minute
+expiry. Treat these as load-bearing, not decoration.
