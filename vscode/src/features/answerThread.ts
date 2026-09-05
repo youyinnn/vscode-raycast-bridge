@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import { pickDismissTarget } from "../bridge/dismissTarget";
+import { isLongAnswer } from "../bridge/longAnswer";
 import { preserveLineBreaks } from "../bridge/markdown";
 import type { AnswerSession, AnswerSink, AnswerTarget } from "./answerSink";
 
@@ -8,6 +10,8 @@ const DISMISS_ALL_COMMAND = "raycastBridge.dismissAllAnswers";
 const PLACEHOLDER = "_Asking Raycast..._";
 /** Names the Comments panel group, and stands in when no model is known. */
 const CONTROLLER_NAME = "Raycast AI";
+/** globalState key: the user declined the offer to lift VSCode's comment height cap. */
+const CAP_PROMPT_DECLINED = "raycastBridge.answerCapPromptDeclined";
 
 /**
  * Renders an answer as a comment thread anchored under the selection.
@@ -22,12 +26,15 @@ const CONTROLLER_NAME = "Raycast AI";
 export class AnswerThread implements AnswerSink {
   private controller: vscode.CommentController | undefined;
   private readonly threads = new Map<string, vscode.CommentThread>();
+  private state: vscode.Memento | undefined;
 
   register(context: vscode.ExtensionContext): void {
+    this.state = context.globalState;
     context.subscriptions.push(
-      // VSCode marshals the thread whose title bar was clicked into the argument.
+      // VSCode marshals the thread whose title bar was clicked into the
+      // argument. The Escape keybinding passes nothing, so the target is guessed.
       vscode.commands.registerCommand(DISMISS_COMMAND, (thread?: vscode.CommentThread) =>
-        this.dismiss(thread),
+        this.dismiss(thread ?? this.focusedGuess()),
       ),
       vscode.commands.registerCommand(DISMISS_ALL_COMMAND, () => this.dismissAll()),
       {
@@ -43,6 +50,8 @@ export class AnswerThread implements AnswerSink {
   open(target: AnswerTarget): AnswerSession {
     const key = anchor(target);
     this.threads.get(key)?.dispose();
+    // Re-inserted below so the map's order stays "most recently opened last".
+    this.threads.delete(key);
 
     // The comment's author line is where "who answered this" belongs, and
     // VSCode renders it in bold above the body: the bridge, then the model.
@@ -68,7 +77,12 @@ export class AnswerThread implements AnswerSink {
 
     return {
       update: (body) => render(body.trim() || PLACEHOLDER),
-      done: async (body) => render(body),
+      done: async (body) => {
+        render(body);
+        if (this.threads.get(key) === thread && isLongAnswer(body)) {
+          await this.offerToLiftHeightCap();
+        }
+      },
       dispose: () => this.remove(key, thread),
     };
   }
@@ -82,6 +96,51 @@ export class AnswerThread implements AnswerSink {
     }
     // Not one of ours to track, but the user still asked for it to go.
     thread?.dispose();
+  }
+
+  /**
+   * VSCode caps a comment body at 20em and, once the cap is hit, stops
+   * refreshing the scrollbar, so the rest of a long answer is unreachable
+   * until the widget is resized by hand. The only fix available from an
+   * extension is the setting that removes the cap, and it is global to all
+   * comment threads, so it is offered once rather than applied.
+   */
+  private async offerToLiftHeightCap(): Promise<void> {
+    const comments = vscode.workspace.getConfiguration("comments");
+    if (comments.get<boolean>("maxHeight") === false || this.state?.get(CAP_PROMPT_DECLINED)) {
+      return;
+    }
+    const lift = "Show answers in full";
+    const never = "Don't ask again";
+    const choice = await vscode.window.showInformationMessage(
+      "VS Code cuts a comment thread off at about 20 lines and this answer is longer. Let inline answers expand to their full height? This turns off the 'comments.maxHeight' setting for every comment thread.",
+      lift,
+      never,
+    );
+    if (choice === lift) {
+      await comments.update("maxHeight", false, vscode.ConfigurationTarget.Global);
+    } else if (choice === never) {
+      await this.state?.update(CAP_PROMPT_DECLINED, true);
+    }
+  }
+
+  /**
+   * The thread Escape most likely means. VSCode reports that some comment
+   * widget has focus, not which, so the cursor position stands in for it.
+   */
+  private focusedGuess(): vscode.CommentThread | undefined {
+    const editor = vscode.window.activeTextEditor;
+    const open = [...this.threads].map(([key, thread]) => ({
+      key,
+      uri: thread.uri.toString(),
+      start: thread.range?.start.line ?? 0,
+      end: thread.range?.end.line ?? 0,
+    }));
+    const key = pickDismissTarget(
+      open,
+      editor && { uri: editor.document.uri.toString(), line: editor.selection.active.line },
+    );
+    return key === undefined ? undefined : this.threads.get(key);
   }
 
   private dismissAll(): void {

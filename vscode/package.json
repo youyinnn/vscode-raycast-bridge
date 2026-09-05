@@ -2,7 +2,7 @@
   "name": "vscode-raycast-bridge",
   "displayName": "Raycast Bridge",
   "description": "Use Raycast AI as a chat model in VS Code, and run Raycast commands and AI quick actions on your selection.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "Jun",
   "license": "MIT",
   "icon": "icon.png",
@@ -198,7 +198,7 @@
             "hover"
           ],
           "enumDescriptions": [
-            "A block under the selection. Stays until dismissed, and streams the answer in as it arrives.",
+            "A block under the selection. Stays until dismissed with its close button or Escape, and streams the answer in as it arrives. VS Code cuts the block off at about 20 lines unless the 'comments.maxHeight' setting is turned off; the extension offers to do that the first time an answer is longer.",
             "A hover next to the selection. Costs no layout, but a scroll or a click elsewhere dismisses it and the answer only appears once it is complete."
           ],
           "description": "How a quick action's answer is shown."
@@ -229,6 +229,13 @@
         }
       }
     },
+    "keybindings": [
+      {
+        "command": "raycastBridge.dismissAnswer",
+        "key": "escape",
+        "when": "(commentFocused || commentEditorFocused) && commentController == raycastBridge.answers"
+      }
+    ],
     "menus": {
       "commandPalette": [
         {

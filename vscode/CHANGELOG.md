@@ -3,6 +3,13 @@
 All notable changes to the Raycast Bridge extension are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [0.1.1] - 2026-09-05
+
+- Escape dismisses the focused inline answer instead of collapsing it.
+- Long inline answers were cut off at VS Code's 20-line comment cap with no working
+  scrollbar. The extension now offers, once, to turn off `comments.maxHeight` so answers
+  expand in full.
+
 ## [0.1.0] - 2026-09-05
 
 Initial release.

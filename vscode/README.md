@@ -17,7 +17,10 @@ instruction you type.
 
 **Quick actions on the selection.** Select text and a lightbulb entry and a code lens offer
 actions such as *Translate to Chinese*, *Explain* and *Polish as Academic English*. The answer
-streams in under the selection, or into a hover. Each action has its own prompt and can pin
+streams in under the selection, or into a hover. Click into an inline answer and press
+Escape to dismiss it. VS Code caps a comment thread at about 20 lines and does not
+refresh its scrollbar after that, so the first time an answer is longer the extension
+offers to turn off `comments.maxHeight`, which lets answers expand in full. Each action has its own prompt and can pin
 its own model with `Raycast: Select Quick Action Model`. Bind one to a key by writing a
 keybinding by hand:
 
