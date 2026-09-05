@@ -1,5 +1,11 @@
 import * as vscode from "vscode";
 import { askAI } from "./features/askAI";
+import { registerModelProvider } from "./features/modelProvider";
+import { selectModels } from "./features/selectModels";
+import { CatalogStore, migrateDeprecatedModels } from "./features/catalogStore";
+import { diagnose } from "./features/diagnose";
+import { testModel } from "./features/testModel";
+import { probeModels } from "./features/probeModels";
 import { runCommand } from "./features/runCommand";
 import { BridgeServer } from "./bridge/server";
 
@@ -10,12 +16,22 @@ export function activate(context: vscode.ExtensionContext): void {
     return;
   }
 
-  const server = new BridgeServer();
-  context.subscriptions.push({ dispose: () => server.dispose() });
+  const log = vscode.window.createOutputChannel("Raycast Bridge", { log: true });
+  const server = new BridgeServer((message) => log.info(message));
+  context.subscriptions.push(log, { dispose: () => server.dispose() });
+
+  const catalog = new CatalogStore(context.globalState, log);
+  registerModelProvider(context, server, log, catalog);
+  void migrateDeprecatedModels(catalog, log);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand("raycastBridge.askAI", () => askAI(server)),
+    vscode.commands.registerCommand("raycastBridge.askAI", () => askAI()),
     vscode.commands.registerCommand("raycastBridge.runCommand", () => runCommand()),
+    vscode.commands.registerCommand("raycastBridge.selectModels", () => selectModels(catalog)),
+    vscode.commands.registerCommand("raycastBridge.diagnose", () => diagnose()),
+    vscode.commands.registerCommand("raycastBridge.showLog", () => log.show()),
+    vscode.commands.registerCommand("raycastBridge.testModel", () => testModel(log, catalog, server)),
+    vscode.commands.registerCommand("raycastBridge.probeModels", () => probeModels(log, catalog, server)),
   );
 }
 

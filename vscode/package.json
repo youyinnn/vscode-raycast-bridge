@@ -24,6 +24,37 @@
         "command": "raycastBridge.runCommand",
         "title": "Run Command",
         "category": "Raycast"
+      },
+      {
+        "command": "raycastBridge.selectModels",
+        "title": "Select Chat Models",
+        "category": "Raycast"
+      },
+      {
+        "command": "raycastBridge.diagnose",
+        "title": "Diagnose Model Provider",
+        "category": "Raycast"
+      },
+      {
+        "command": "raycastBridge.showLog",
+        "title": "Show Log",
+        "category": "Raycast"
+      },
+      {
+        "command": "raycastBridge.testModel",
+        "title": "Test Model Directly",
+        "category": "Raycast"
+      },
+      {
+        "command": "raycastBridge.probeModels",
+        "title": "Probe Which Models Work",
+        "category": "Raycast"
+      }
+    ],
+    "languageModelChatProviders": [
+      {
+        "vendor": "raycast",
+        "displayName": "Raycast AI"
       }
     ],
     "configuration": {
@@ -34,10 +65,13 @@
           "default": "Youyinnn",
           "description": "Your Raycast Store handle. Used as the <author-or-owner> segment of raycast:// deeplinks."
         },
-        "raycastBridge.model": {
-          "type": "string",
-          "default": "",
-          "description": "Raycast AI model id. Leave empty to use the Raycast default."
+        "raycastBridge.models": {
+          "type": "array",
+          "default": [],
+          "description": "Raycast AI model ids to offer in the chat model picker. Edit with 'Raycast: Select Chat Models'. Raycast's own default is always offered.",
+          "items": {
+            "type": "string"
+          }
         },
         "raycastBridge.creativity": {
           "type": "string",
@@ -82,7 +116,8 @@
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node20",
     "watch": "npm run build -- --sourcemap --watch",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gen:models": "node scripts/generate-sdk-models.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",

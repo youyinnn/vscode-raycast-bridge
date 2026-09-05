@@ -1,56 +1,43 @@
-import { randomUUID } from "node:crypto";
 import * as vscode from "vscode";
-import { buildDeeplink, openDeeplink } from "../bridge/deeplink";
-import type { BridgeContext, Job } from "../bridge/protocol";
-import type { BridgeServer } from "../bridge/server";
+import { composePrompt, type Reference } from "../bridge/composePrompt";
 
-const EXTENSION_NAME = "vscode-bridge";
-const COMMAND_NAME = "ask-ai";
+/**
+ * Entry point from the command palette. Answers render in the native Chat view
+ * against the Raycast model (see modelProvider.ts), so this only composes a
+ * query -- including the selection, which chat would not otherwise carry --
+ * and hands it over.
+ */
 
-type Preset = { label: string; detail: string; build: (code: string, language: string) => string };
+/** Raycast AI charges per request, so an oversized selection is trimmed. */
+const MAX_SELECTION_CHARS = 20_000;
+
+type Preset = { label: string; detail: string; instruction?: string };
 
 const PRESETS: Preset[] = [
   {
     label: "Explain",
     detail: "Explain what the selected code does",
-    build: (code, language) => `Explain what this ${language} code does.\n\n\`\`\`${language}\n${code}\n\`\`\``,
+    instruction: "Explain what this code does.",
   },
   {
     label: "Refactor",
     detail: "Suggest a cleaner version",
-    build: (code, language) =>
-      `Refactor this ${language} code for clarity. Return the rewritten code plus a short rationale.\n\n\`\`\`${language}\n${code}\n\`\`\``,
+    instruction: "Refactor this code for clarity. Return the rewritten code plus a short rationale.",
   },
   {
     label: "Write tests",
     detail: "Generate tests for the selection",
-    build: (code, language) => `Write tests for this ${language} code.\n\n\`\`\`${language}\n${code}\n\`\`\``,
+    instruction: "Write tests for this code.",
   },
   {
     label: "Find bugs",
     detail: "Review the selection for defects",
-    build: (code, language) =>
-      `Review this ${language} code for bugs. For each issue give the failure scenario.\n\n\`\`\`${language}\n${code}\n\`\`\``,
+    instruction: "Review this code for bugs. For each issue give the failure scenario.",
   },
-  { label: "Custom...", detail: "Type your own instruction", build: (code) => code },
+  { label: "Custom...", detail: "Type your own instruction" },
 ];
 
-export async function askAI(server: BridgeServer): Promise<void> {
-  const editor = vscode.window.activeTextEditor;
-  if (!editor) {
-    void vscode.window.showWarningMessage("Raycast Bridge: open a file first.");
-    return;
-  }
-
-  const selection = editor.selection.isEmpty
-    ? editor.document.getText()
-    : editor.document.getText(editor.selection);
-  if (!selection.trim()) {
-    void vscode.window.showWarningMessage("Raycast Bridge: nothing to send.");
-    return;
-  }
-
-  const language = editor.document.languageId;
+export async function askAI(): Promise<void> {
   const picked = await vscode.window.showQuickPick(
     PRESETS.map((preset) => ({ label: preset.label, detail: preset.detail, preset })),
     { placeHolder: "What should Raycast AI do with this code?" },
@@ -59,95 +46,48 @@ export async function askAI(server: BridgeServer): Promise<void> {
     return;
   }
 
-  let prompt: string;
-  if (picked.preset.label === "Custom...") {
-    const instruction = await vscode.window.showInputBox({
+  let instruction = picked.preset.instruction;
+  if (!instruction) {
+    instruction = await vscode.window.showInputBox({
       prompt: "Instruction for Raycast AI",
       placeHolder: "e.g. Convert this to async/await",
     });
     if (!instruction) {
       return;
     }
-    prompt = `${instruction}\n\n\`\`\`${language}\n${selection}\n\`\`\``;
-  } else {
-    prompt = picked.preset.build(selection, language);
   }
 
-  const config = vscode.workspace.getConfiguration("raycastBridge");
-  const owner = config.get<string>("owner")?.trim();
-  if (!owner) {
-    void vscode.window.showErrorMessage(
-      "Raycast Bridge: set raycastBridge.owner to your Raycast Store handle.",
-    );
-    return;
-  }
+  const selected = selectionReference();
+  const query = composePrompt({ question: instruction, references: selected ? [selected] : [] });
 
-  const model = config.get<string>("model")?.trim();
-  const job: Job = {
-    id: randomUUID(),
-    kind: "ai.ask",
-    prompt,
-    creativity: config.get<string>("creativity") ?? "none",
-    ...(model ? { model } : {}),
-  };
-
-  const document = await vscode.workspace.openTextDocument({
-    content: `# ${picked.preset.label}\n\n`,
-    language: "markdown",
-  });
-  await vscode.window.showTextDocument(document, { preview: false, viewColumn: vscode.ViewColumn.Beside });
-
-  const writer = createAppender(document);
-  const finished = new Promise<void>((resolve) => {
-    server.register(job, {
-      onChunk: (text) => writer.push(text),
-      onDone: async (result) => {
-        await writer.drain();
-        if (!result.ok) {
-          void vscode.window.showErrorMessage(`Raycast AI: ${result.error}`);
-        }
-        resolve();
-      },
+  try {
+    // modelSelector switches the chat to Raycast, so this command cannot
+    // silently send the query to whichever model happened to be selected.
+    await vscode.commands.executeCommand("workbench.action.chat.open", {
+      query,
+      modelSelector: { vendor: "raycast" },
     });
-  });
-
-  const port = await server.listen();
-  const context: BridgeContext = { jobId: job.id, port, token: server.token };
-  await openDeeplink(
-    buildDeeplink({ owner, extension: EXTENSION_NAME, command: COMMAND_NAME, launchType: "background", context }),
-  );
-
-  await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: `Raycast AI: ${picked.preset.label}` },
-    () => finished,
-  );
+  } catch {
+    void vscode.window.showInformationMessage(
+      "Raycast Bridge: could not open the Chat view. Ask there directly with a Raycast AI model selected.",
+    );
+  }
 }
 
-/**
- * Serialises appends to the result document. Chunks arrive faster than
- * WorkspaceEdit can apply them, so they are queued rather than raced.
- */
-function createAppender(document: vscode.TextDocument) {
-  let queue = "";
-  let pump: Promise<void> = Promise.resolve();
-
-  const write = async () => {
-    if (!queue) return;
-    const text = queue;
-    queue = "";
-    const edit = new vscode.WorkspaceEdit();
-    edit.insert(document.uri, document.lineAt(document.lineCount - 1).range.end, text);
-    await vscode.workspace.applyEdit(edit);
-  };
-
+function selectionReference(): Reference | undefined {
+  const editor = vscode.window.activeTextEditor;
+  if (!editor) {
+    return undefined;
+  }
+  const range = editor.selection.isEmpty ? undefined : editor.selection;
+  const content = editor.document.getText(range).slice(0, MAX_SELECTION_CHARS);
+  if (!content.trim()) {
+    return undefined;
+  }
+  const name = vscode.workspace.asRelativePath(editor.document.uri);
   return {
-    push(text: string) {
-      queue += text;
-      pump = pump.then(write).catch(() => undefined);
-    },
-    async drain() {
-      await pump;
-      await write();
-    },
+    label: range ? `${name}:${range.start.line + 1}-${range.end.line + 1}` : name,
+    language: editor.document.languageId,
+    content,
   };
 }
