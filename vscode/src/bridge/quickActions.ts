@@ -10,10 +10,18 @@
  */
 
 /**
- * `render: false` shows the answer verbatim instead of as Markdown. Present
- * only when set, so the default needs no field.
+ * `render: false` shows the answer verbatim instead of as Markdown.
+ * `cache: false` asks Raycast again every time, for actions whose whole point
+ * is a fresh answer. Both are present only when set, so the defaults need no
+ * field.
  */
-export type QuickAction = { label: string; prompt: string; model?: string; render?: false };
+export type QuickAction = {
+  label: string;
+  prompt: string;
+  model?: string;
+  render?: false;
+  cache?: false;
+};
 
 /** Raycast AI charges per request, so an oversized selection is trimmed. */
 export const MAX_SELECTION_CHARS = 20_000;
@@ -36,7 +44,7 @@ export function parseQuickActions(raw: unknown): QuickAction[] {
     if (typeof entry !== "object" || entry === null) {
       continue;
     }
-    const { label, prompt, model, render } = entry as Record<string, unknown>;
+    const { label, prompt, model, render, cache } = entry as Record<string, unknown>;
     const trimmedLabel = text(label);
     const trimmedPrompt = text(prompt);
     if (!trimmedLabel || !trimmedPrompt) {
@@ -48,6 +56,7 @@ export function parseQuickActions(raw: unknown): QuickAction[] {
       prompt: trimmedPrompt,
       ...(trimmedModel ? { model: trimmedModel } : {}),
       ...(render === false ? { render: false } : {}),
+      ...(cache === false ? { cache: false } : {}),
     });
   }
   return actions;

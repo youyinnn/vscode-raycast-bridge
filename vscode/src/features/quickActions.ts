@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { askRaycast } from "../bridge/ask";
+import { cacheableSelection } from "../bridge/answerCache";
 import {
   buildQuickPrompt,
   findQuickAction,
@@ -9,10 +10,12 @@ import {
 } from "../bridge/quickActions";
 import { selectionOrCursorLine, type RangeTuple } from "../bridge/selectionTarget";
 import type { BridgeServer } from "../bridge/server";
+import type { AnswerCacheStore } from "./answerCacheStore";
 import type { AnswerSink } from "./answerSink";
 import type { CatalogStore } from "./catalogStore";
 
 const RUN_COMMAND = "raycastBridge.quickAction";
+const REGENERATE_COMMAND = "raycastBridge.regenerateAnswer";
 
 /** The two rendering backends, selected per call by `raycastBridge.quickActionsDisplay`. */
 export type AnswerSinks = { hover: AnswerSink; inline: AnswerSink };
@@ -39,13 +42,16 @@ function isKeyArgs(args: RunArgs | KeyArgs | undefined): args is KeyArgs {
 /** Recomputing lenses relayouts the document, and dragging a selection fires per pixel. */
 const SELECTION_DEBOUNCE_MS = 150;
 
-export function registerQuickActions(
-  context: vscode.ExtensionContext,
-  server: BridgeServer,
-  log: vscode.LogOutputChannel,
-  sinks: AnswerSinks,
-  catalog: CatalogStore,
-): void {
+/** Everything running an action needs, bundled so the chain of calls stays readable. */
+export type QuickActionDeps = {
+  server: BridgeServer;
+  log: vscode.LogOutputChannel;
+  sinks: AnswerSinks;
+  catalog: CatalogStore;
+  cache: AnswerCacheStore;
+};
+
+export function registerQuickActions(context: vscode.ExtensionContext, deps: QuickActionDeps): void {
   const provider = new QuickActionProvider();
   context.subscriptions.push(
     provider,
@@ -54,9 +60,12 @@ export function registerQuickActions(
     }),
     vscode.languages.registerCodeLensProvider("*", provider),
     vscode.commands.registerCommand(RUN_COMMAND, (args: RunArgs | KeyArgs | undefined) =>
-      isKeyArgs(args)
-        ? runByLabel(args.action, server, log, sinks, catalog)
-        : run(args as RunArgs, server, log, sinks, catalog),
+      isKeyArgs(args) ? runByLabel(args.action, deps) : run(args as RunArgs, deps),
+    ),
+    // Owned here rather than by a sink: a command id may only be registered
+    // once, and either sink can be the one showing the replayed answer.
+    vscode.commands.registerCommand(REGENERATE_COMMAND, (arg?: unknown) =>
+      (deps.sinks.inline.rerun(arg) ?? deps.sinks.hover.rerun(arg))?.(),
     ),
   );
 }
@@ -147,13 +156,7 @@ class QuickActionProvider implements vscode.CodeActionProvider, vscode.CodeLensP
  * indistinguishable from a broken binding, and the label is hand-typed into a
  * file VSCode does not validate.
  */
-async function runByLabel(
-  label: unknown,
-  server: BridgeServer,
-  log: vscode.LogOutputChannel,
-  sinks: AnswerSinks,
-  catalog: CatalogStore,
-): Promise<void> {
+async function runByLabel(label: unknown, deps: QuickActionDeps): Promise<void> {
   const actions = quickActions();
   const action = findQuickAction(actions, label);
   if (!action) {
@@ -175,22 +178,15 @@ async function runByLabel(
     void vscode.window.showWarningMessage("Raycast: select some text, or put the cursor on a line that has some.");
     return;
   }
-  await run(
-    { index: actions.indexOf(action), uri: editor.document.uri.toString(), range },
-    server,
-    log,
-    sinks,
-    catalog,
-  );
+  await run({ index: actions.indexOf(action), uri: editor.document.uri.toString(), range }, deps);
 }
 
-async function run(
-  args: RunArgs,
-  server: BridgeServer,
-  log: vscode.LogOutputChannel,
-  sinks: AnswerSinks,
-  catalog: CatalogStore,
-): Promise<void> {
+/**
+ * `fresh` skips the cache and overwrites it: what the Regenerate affordance
+ * on a replayed answer asks for.
+ */
+async function run(args: RunArgs, deps: QuickActionDeps, fresh = false): Promise<void> {
+  const { server, log, sinks, catalog, cache } = deps;
   const action: QuickAction | undefined = quickActions()[args.index];
   if (!action) {
     return; // The setting changed between rendering the entry and clicking it.
@@ -220,13 +216,39 @@ async function run(
   // Named from the catalog already in memory: a quick action must not wait on
   // a network fetch just to label its own answer.
   const model = quickActionModelLabel(action, (id) => catalog.find(id)?.name);
-  const session = display(sinks).open({
+  const shape = {
     uri,
     range,
     title: action.label,
     model,
-    ...(action.render === false ? { render: false } : {}),
-  });
+    ...(action.render === false ? { render: false as const } : {}),
+  };
+
+  // The key covers the composed prompt and the model, which is everything
+  // that decides the answer. It is composed a second time from the normalised
+  // selection rather than reusing `request.prompt`: the request keeps the text
+  // exactly as selected, while the key ignores a trailing newline the drag
+  // happened to catch. `undefined` means this run is not to be cached: the
+  // action opted out, or the setting is off.
+  const key =
+    action.cache === false
+      ? undefined
+      : cache.key(buildQuickPrompt(action, cacheableSelection(selected)), action.model);
+  if (key && !fresh) {
+    const stored = await cache.take(key);
+    if (stored) {
+      log.info(`quick action "${action.label}" served from cache`);
+      const replay = display(sinks).open({
+        ...shape,
+        cached: true,
+        regenerate: () => void run(args, deps, true),
+      });
+      await replay.done(stored);
+      return;
+    }
+  }
+
+  const session = display(sinks).open(shape);
 
   // Window progress, not a notification: a notification takes focus, and
   // `editor.action.showHover` is a no-op unless the editor still has it.
@@ -255,7 +277,11 @@ async function run(
     void vscode.window.showWarningMessage(`Raycast: ${action.label} returned an empty answer.`);
     return;
   }
-  await session.done(body.trim());
+  const answer = body.trim();
+  if (key) {
+    await cache.put(key, answer);
+  }
+  await session.done(answer);
 }
 
 function runArgs(index: number, uri: vscode.Uri, range: vscode.Range): RunArgs {

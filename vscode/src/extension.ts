@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { AnswerCacheStore } from "./features/answerCacheStore";
 import { AnswerHover } from "./features/answerHover";
 import { AnswerThread } from "./features/answerThread";
 import { askAI } from "./features/askAI";
@@ -32,7 +33,8 @@ export function activate(context: vscode.ExtensionContext): void {
   hover.register(context);
   const inline = new AnswerThread();
   inline.register(context);
-  registerQuickActions(context, server, log, { hover, inline }, catalog);
+  const cache = new AnswerCacheStore(context.globalState);
+  registerQuickActions(context, { server, log, sinks: { hover, inline }, catalog, cache });
 
   context.subscriptions.push(
     vscode.commands.registerCommand("raycastBridge.askAI", () => askAI()),
@@ -43,6 +45,14 @@ export function activate(context: vscode.ExtensionContext): void {
     ),
     vscode.commands.registerCommand("raycastBridge.diagnose", () => diagnose()),
     vscode.commands.registerCommand("raycastBridge.showLog", () => log.show()),
+    vscode.commands.registerCommand("raycastBridge.clearQuickActionCache", async () => {
+      const dropped = await cache.clear();
+      void vscode.window.showInformationMessage(
+        dropped === 1
+          ? "Raycast Bridge: dropped 1 cached answer."
+          : `Raycast Bridge: dropped ${dropped} cached answers.`,
+      );
+    }),
     vscode.commands.registerCommand("raycastBridge.testModel", () => testModel(log, catalog, server)),
     vscode.commands.registerCommand("raycastBridge.probeModels", () => probeModels(log, catalog, server)),
   );

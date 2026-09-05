@@ -6,6 +6,8 @@ import { preserveLineBreaks } from "../bridge/markdown";
 import type { AnswerSession, AnswerSink, AnswerTarget } from "./answerSink";
 
 const CONTROLLER_ID = "raycastBridge.answers";
+/** `contextValue` for a replayed answer, which alone offers Regenerate. */
+const RERUNNABLE_CONTEXT = "raycastBridge.answers.cached";
 const DISMISS_COMMAND = "raycastBridge.dismissAnswer";
 const DISMISS_ALL_COMMAND = "raycastBridge.dismissAllAnswers";
 const PLACEHOLDER = "Asking Raycast...";
@@ -35,6 +37,12 @@ const CAP_PROMPT_DECLINED = "raycastBridge.answerCapPromptDeclined";
 export class AnswerThread implements AnswerSink {
   private controller: vscode.CommentController | undefined;
   private readonly threads = new Map<string, vscode.CommentThread>();
+  /**
+   * Kept beside the threads rather than on them: `CommentThread` carries no
+   * field an extension may attach a callback to, and the title bar command is
+   * handed the thread itself, which is enough to look one up.
+   */
+  private readonly reruns = new Map<vscode.CommentThread, () => void>();
   private state: vscode.Memento | undefined;
 
   register(context: vscode.ExtensionContext): void {
@@ -58,13 +66,21 @@ export class AnswerThread implements AnswerSink {
 
   open(target: AnswerTarget): AnswerSession {
     const key = anchor(target);
-    this.threads.get(key)?.dispose();
+    const replaced = this.threads.get(key);
+    if (replaced) {
+      replaced.dispose();
+      this.reruns.delete(replaced);
+    }
     // Re-inserted below so the map's order stays "most recently opened last".
     this.threads.delete(key);
 
     // The comment's author line is where "who answered this" belongs, and
     // VSCode renders it in bold above the body: the bridge, then the model.
-    const author = target.model ? `${CONTROLLER_NAME} · ${target.model}` : CONTROLLER_NAME;
+    // A replayed answer says so there too, since arriving instantly is
+    // otherwise indistinguishable from arriving very fast.
+    const author = [CONTROLLER_NAME, target.model, target.cached ? "cached" : undefined]
+      .filter(Boolean)
+      .join(" · ");
     const markdown = target.render !== false;
     const thread = this.ensureController().createCommentThread(target.uri, target.range, [
       comment(PLACEHOLDER, author, markdown),
@@ -73,9 +89,14 @@ export class AnswerThread implements AnswerSink {
     thread.label = target.title;
     thread.canReply = false;
     thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
-    // Gates the Dismiss button's `when` clause in the thread's title bar.
-    thread.contextValue = CONTROLLER_ID;
+    // Gates the title bar buttons' `when` clauses. Regenerate is offered only
+    // on a replayed answer: on a fresh one it would just repeat the call that
+    // has this second finished.
+    thread.contextValue = target.regenerate ? RERUNNABLE_CONTEXT : CONTROLLER_ID;
     this.threads.set(key, thread);
+    if (target.regenerate) {
+      this.reruns.set(thread, target.regenerate);
+    }
     void this.focusSoon(key, thread, target);
 
     // Guarded against this thread having been dismissed or replaced already:
@@ -96,6 +117,11 @@ export class AnswerThread implements AnswerSink {
       },
       dispose: () => this.remove(key, thread),
     };
+  }
+
+  /** VSCode marshals in the thread whose title bar was clicked. */
+  rerun(arg: unknown): (() => void) | undefined {
+    return this.reruns.get(arg as vscode.CommentThread);
   }
 
   private dismiss(thread?: vscode.CommentThread): void {
@@ -188,12 +214,14 @@ export class AnswerThread implements AnswerSink {
       thread.dispose();
     }
     this.threads.clear();
+    this.reruns.clear();
   }
 
   private remove(key: string, thread: vscode.CommentThread): void {
     if (this.threads.get(key) === thread) {
       this.threads.delete(key);
     }
+    this.reruns.delete(thread);
     thread.dispose();
   }
 

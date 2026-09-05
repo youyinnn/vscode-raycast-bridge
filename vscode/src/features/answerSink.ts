@@ -8,6 +8,10 @@ import * as vscode from "vscode";
  * but it eats LaTeX's `_` and `\`, refuses to wrap code blocks, and turns a
  * fenced answer into a horizontally scrolling box, so an action whose output
  * is meant to be read or copied verbatim can opt out.
+ *
+ * `cached` and `regenerate` come as a pair, set when the answer was replayed
+ * from an earlier run rather than asked for again. A sink is told only that
+ * there is a rerun available; it never learns what a cache is.
  */
 export type AnswerTarget = {
   uri: vscode.Uri;
@@ -15,6 +19,8 @@ export type AnswerTarget = {
   title: string;
   model?: string;
   render?: false;
+  cached?: true;
+  regenerate?: () => void;
 };
 
 /**
@@ -30,6 +36,17 @@ export type AnswerTarget = {
 export interface AnswerSink {
   /** Starts an answer for `target`. The previous answer, if any, is dropped. */
   open(target: AnswerTarget): AnswerSession;
+  /**
+   * The rerun offered by the answer `arg` names, or `undefined` if that
+   * answer is not this sink's.
+   *
+   * Both sinks put a Regenerate affordance on a replayed answer, and a
+   * command id can only be registered once, so the command is owned by the
+   * quick action feature and asks each sink whether the click was on one of
+   * its own. `arg` is whatever VSCode marshals in: the comment thread whose
+   * title bar was clicked, or nothing at all from a hover link.
+   */
+  rerun(arg: unknown): (() => void) | undefined;
 }
 
 export interface AnswerSession {

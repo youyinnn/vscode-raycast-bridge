@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-05
+
+- Quick action answers are remembered. Running the same text through the same action and
+  model again replays the stored answer instead of spending Raycast AI quota, which the
+  per-minute and per-hour limits make worth doing. A replayed answer is labelled `cached`
+  and carries a Regenerate button that asks Raycast afresh. The last 100 answers are kept.
+  `Raycast: Clear Quick Action Cache` forgets them, `raycastBridge.quickActionCache` turns
+  the whole thing off, and an action can opt out with `"cache": false`.
+
+  An action with a model pinned is keyed to that model; one with no model pinned is keyed
+  to the installed Raycast version instead, since that is what decides which model answers.
+  Whitespace at the end of the selection is ignored when matching, since a drag easily
+  overshoots into the newline; indentation at the start is not, since it is what an
+  indented answer was written to match.
+
 - A quick action bound to a key runs on the line the cursor is on when nothing is selected.
   Bind it with `"when": "editorTextFocus"` rather than `"when": "editorHasSelection"` to
   reach this.

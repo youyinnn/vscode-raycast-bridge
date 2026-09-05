@@ -221,3 +221,20 @@ describe("parseQuickActions render flag", () => {
     expect(parseQuickActions([{ label: "a", prompt: "p", render: "no" }])).toEqual([{ label: "a", prompt: "p" }]);
   });
 });
+
+describe("parseQuickActions cache flag", () => {
+  it("keeps an explicit cache: false", () => {
+    expect(parseQuickActions([{ label: "a", prompt: "p", cache: false }])).toEqual([
+      { label: "a", prompt: "p", cache: false },
+    ]);
+  });
+
+  it("omits the flag when caching is the default", () => {
+    expect(parseQuickActions([{ label: "a", prompt: "p" }])).toEqual([{ label: "a", prompt: "p" }]);
+    expect(parseQuickActions([{ label: "a", prompt: "p", cache: true }])).toEqual([{ label: "a", prompt: "p" }]);
+  });
+
+  it("ignores a cache value that is not a boolean", () => {
+    expect(parseQuickActions([{ label: "a", prompt: "p", cache: "no" }])).toEqual([{ label: "a", prompt: "p" }]);
+  });
+});

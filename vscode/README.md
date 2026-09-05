@@ -47,6 +47,17 @@ A key press with nothing selected runs the action on the line the cursor is on, 
 edits need no selecting first. The lightbulb and the code lens still wait for a real
 selection, since either would otherwise offer itself on every line of every file.
 
+**Answers are cached.** Running the same text through the same action and model replays the
+stored answer instead of spending Raycast AI quota again, which the per-minute and per-hour
+limits make worth doing. A replayed answer is labelled *cached* and carries a Regenerate
+button that asks Raycast afresh. The last 100 answers are kept; `Raycast: Clear Quick Action
+Cache` forgets them. Turn the whole thing off with `raycastBridge.quickActionCache`, or one
+action at a time by giving it `"cache": false`. Whitespace at the end of the selection is
+ignored when matching, since a drag easily overshoots into the newline; indentation at the
+start is not, since it is what an indented answer was written to match. Pinning a model keys the cache to that model;
+an action with no model pinned is keyed to the installed Raycast version instead, since that
+is what decides which model answers.
+
 **Run Raycast commands.** `Raycast: Run Command` fires any deeplink listed in
 `raycastBridge.commands`, optionally injecting the selection.
 
@@ -92,6 +103,7 @@ selection, since either would otherwise offer itself on every line of every file
 | `Raycast: Diagnose Model Provider` | Report what the language model service sees |
 | `Raycast: Show Log` | Open the extension's log |
 | `Raycast: Dismiss All Answers` | Remove inline quick-action answers |
+| `Raycast: Clear Quick Action Cache` | Forget every remembered quick-action answer |
 
 ## Settings
 
@@ -103,6 +115,7 @@ selection, since either would otherwise offer itself on every line of every file
 | `raycastBridge.quickActions` | three actions | Label, prompt and optional model per action. `{{selection}}` places the text inside the prompt |
 | `raycastBridge.quickActionsUI` | `both` | `both`, `lightbulb`, `codeLens` or `none` |
 | `raycastBridge.quickActionsDisplay` | `inline` | `inline` block under the selection, or `hover` |
+| `raycastBridge.quickActionCache` | `true` | Replay a stored answer when the same text, action and model come round again |
 | `raycastBridge.commands` | `[]` | Deeplinks for `Raycast: Run Command`. Copy each one with Raycast's *Copy Deeplink* action |
 
 ## How it works

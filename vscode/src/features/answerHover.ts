@@ -3,6 +3,7 @@ import { preserveLineBreaks } from "../bridge/markdown";
 import type { AnswerSession, AnswerSink, AnswerTarget } from "./answerSink";
 
 const COPY_COMMAND = "raycastBridge.copyAnswer";
+const REGENERATE_COMMAND = "raycastBridge.regenerateAnswer";
 
 /**
  * Shows an answer in a hover next to the text it is about.
@@ -52,6 +53,14 @@ export class AnswerHover implements vscode.HoverProvider, AnswerSink {
     };
   }
 
+  /**
+   * A hover link carries no argument, so anything that does came from the
+   * other sink's title bar and is not this one's to answer.
+   */
+  rerun(arg: unknown): (() => void) | undefined {
+    return arg === undefined ? this.answer?.target.regenerate : undefined;
+  }
+
   provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
     const answer = this.answer;
     if (!answer || document.uri.toString() !== answer.target.uri.toString()) {
@@ -64,10 +73,19 @@ export class AnswerHover implements vscode.HoverProvider, AnswerSink {
     // Scoped trust rather than `isTrusted = true`: the body is model output,
     // and blanket trust would let a returned `[x](command:...)` link run any
     // command in VSCode the moment it is clicked.
-    content.isTrusted = { enabledCommands: [COPY_COMMAND] };
+    content.isTrusted = { enabledCommands: [COPY_COMMAND, REGENERATE_COMMAND] };
     // The model is outside the bold run: the action's name is what the reader
     // is looking for, and the model is the footnote that says who answered.
-    const heading = [`**${answer.target.title}**`, answer.target.model, `[Copy](command:${COPY_COMMAND})`]
+    // "cached" is said out loud: an answer that arrives instantly is otherwise
+    // indistinguishable from a very fast one, and the offer to redo it only
+    // makes sense once the reader knows this one was not just generated.
+    const heading = [
+      `**${answer.target.title}**`,
+      answer.target.model,
+      answer.target.cached ? "cached" : undefined,
+      `[Copy](command:${COPY_COMMAND})`,
+      answer.target.regenerate ? `[Regenerate](command:${REGENERATE_COMMAND})` : undefined,
+    ]
       .filter(Boolean)
       .join(" · ");
     content.appendMarkdown(`${heading}\n\n`);

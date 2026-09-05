@@ -2,7 +2,7 @@
   "name": "vscode-raycast-bridge",
   "displayName": "Raycast Bridge",
   "description": "Use Raycast AI as a chat model in VS Code, and run Raycast commands and AI quick actions on your selection.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "Jun",
   "license": "MIT",
   "icon": "icon.png",
@@ -98,6 +98,17 @@
         "command": "raycastBridge.dismissAllAnswers",
         "title": "Dismiss All Answers",
         "category": "Raycast"
+      },
+      {
+        "command": "raycastBridge.regenerateAnswer",
+        "title": "Regenerate Answer",
+        "category": "Raycast",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "raycastBridge.clearQuickActionCache",
+        "title": "Clear Quick Action Cache",
+        "category": "Raycast"
       }
     ],
     "languageModelChatProviders": [
@@ -174,6 +185,11 @@
                 "type": "boolean",
                 "default": true,
                 "description": "Render the answer as Markdown. Set false to show it verbatim: every line wraps, newlines are kept, and characters such as _ * \\ appear as written, at the cost of bold, lists and code highlighting. Suits actions that rewrite text, such as translation."
+              },
+              "cache": {
+                "type": "boolean",
+                "default": true,
+                "description": "Reuse an earlier answer when the same text is run through this action again, instead of asking Raycast a second time. Set false for actions whose point is a fresh answer each time."
               }
             }
           }
@@ -212,6 +228,11 @@
             "A hover next to the selection. Costs no layout, but a scroll or a click elsewhere dismisses it and the answer only appears once it is complete."
           ],
           "description": "How a quick action's answer is shown."
+        },
+        "raycastBridge.quickActionCache": {
+          "type": "boolean",
+          "default": true,
+          "description": "Remember quick action answers, so running the same text through the same action and model again replays the stored answer instead of spending Raycast AI quota. A replayed answer is labelled 'cached' and offers a Regenerate button. Run 'Raycast: Clear Quick Action Cache' to forget them all."
         },
         "raycastBridge.commands": {
           "type": "array",
@@ -259,13 +280,22 @@
         {
           "command": "raycastBridge.dismissAnswer",
           "when": "false"
+        },
+        {
+          "command": "raycastBridge.regenerateAnswer",
+          "when": "false"
         }
       ],
       "comments/commentThread/title": [
         {
+          "command": "raycastBridge.regenerateAnswer",
+          "when": "commentController == raycastBridge.answers && commentThread == raycastBridge.answers.cached",
+          "group": "inline@1"
+        },
+        {
           "command": "raycastBridge.dismissAnswer",
           "when": "commentController == raycastBridge.answers",
-          "group": "inline"
+          "group": "inline@2"
         }
       ]
     }
