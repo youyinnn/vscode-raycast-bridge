@@ -1,8 +1,15 @@
 import * as vscode from "vscode";
 import { askRaycast } from "../bridge/ask";
-import { buildQuickPrompt, findQuickAction, parseQuickActions, type QuickAction } from "../bridge/quickActions";
+import {
+  buildQuickPrompt,
+  findQuickAction,
+  parseQuickActions,
+  quickActionModelLabel,
+  type QuickAction,
+} from "../bridge/quickActions";
 import type { BridgeServer } from "../bridge/server";
 import type { AnswerSink } from "./answerSink";
+import type { CatalogStore } from "./catalogStore";
 
 const RUN_COMMAND = "raycastBridge.quickAction";
 
@@ -36,6 +43,7 @@ export function registerQuickActions(
   server: BridgeServer,
   log: vscode.LogOutputChannel,
   sinks: AnswerSinks,
+  catalog: CatalogStore,
 ): void {
   const provider = new QuickActionProvider();
   context.subscriptions.push(
@@ -45,7 +53,9 @@ export function registerQuickActions(
     }),
     vscode.languages.registerCodeLensProvider("*", provider),
     vscode.commands.registerCommand(RUN_COMMAND, (args: RunArgs | KeyArgs | undefined) =>
-      isKeyArgs(args) ? runByLabel(args.action, server, log, sinks) : run(args as RunArgs, server, log, sinks),
+      isKeyArgs(args)
+        ? runByLabel(args.action, server, log, sinks, catalog)
+        : run(args as RunArgs, server, log, sinks, catalog),
     ),
   );
 }
@@ -141,6 +151,7 @@ async function runByLabel(
   server: BridgeServer,
   log: vscode.LogOutputChannel,
   sinks: AnswerSinks,
+  catalog: CatalogStore,
 ): Promise<void> {
   const actions = quickActions();
   const action = findQuickAction(actions, label);
@@ -154,7 +165,7 @@ async function runByLabel(
     void vscode.window.showWarningMessage("Raycast: select some text first.");
     return;
   }
-  await run(runArgs(actions.indexOf(action), editor.document.uri, editor.selection), server, log, sinks);
+  await run(runArgs(actions.indexOf(action), editor.document.uri, editor.selection), server, log, sinks, catalog);
 }
 
 async function run(
@@ -162,6 +173,7 @@ async function run(
   server: BridgeServer,
   log: vscode.LogOutputChannel,
   sinks: AnswerSinks,
+  catalog: CatalogStore,
 ): Promise<void> {
   const action: QuickAction | undefined = quickActions()[args.index];
   if (!action) {
@@ -189,12 +201,15 @@ async function run(
     ...(action.model ? { model: action.model } : {}),
   };
 
-  const session = display(sinks).open({ uri, range, title: action.label });
+  // Named from the catalog already in memory: a quick action must not wait on
+  // a network fetch just to label its own answer.
+  const model = quickActionModelLabel(action, (id) => catalog.find(id)?.name);
+  const session = display(sinks).open({ uri, range, title: action.label, model });
 
   // Window progress, not a notification: a notification takes focus, and
   // `editor.action.showHover` is a no-op unless the editor still has it.
   const { result, body } = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Window, title: `Raycast: ${action.label}` },
+    { location: vscode.ProgressLocation.Window, title: `Raycast: ${action.label} · ${model}` },
     async () => {
       let collected = "";
       const done = await askRaycast(server, request, (text) => {

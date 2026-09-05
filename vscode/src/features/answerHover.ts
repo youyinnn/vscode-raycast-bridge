@@ -65,9 +65,12 @@ export class AnswerHover implements vscode.HoverProvider, AnswerSink {
     // and blanket trust would let a returned `[x](command:...)` link run any
     // command in VSCode the moment it is clicked.
     content.isTrusted = { enabledCommands: [COPY_COMMAND] };
-    content.appendMarkdown(
-      `**${answer.target.title}** · [Copy](command:${COPY_COMMAND})\n\n${preserveLineBreaks(answer.body)}`,
-    );
+    // The model is outside the bold run: the action's name is what the reader
+    // is looking for, and the model is the footnote that says who answered.
+    const heading = [`**${answer.target.title}**`, answer.target.model, `[Copy](command:${COPY_COMMAND})`]
+      .filter(Boolean)
+      .join(" · ");
+    content.appendMarkdown(`${heading}\n\n${preserveLineBreaks(answer.body)}`);
     return new vscode.Hover(content, answer.target.range);
   }
 

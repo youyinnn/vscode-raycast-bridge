@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { MAX_SELECTION_CHARS, buildQuickPrompt, findQuickAction, parseQuickActions } from "./quickActions";
+import {
+  MAX_SELECTION_CHARS,
+  buildQuickPrompt,
+  findQuickAction,
+  parseQuickActions,
+  quickActionModelLabel,
+  setQuickActionModel,
+} from "./quickActions";
 
 describe("parseQuickActions", () => {
   it("returns nothing when the setting is not an array", () => {
@@ -136,5 +143,64 @@ describe("findQuickAction", () => {
   it("takes the first of two actions sharing a label", () => {
     const duplicated = [...actions, { label: "Explain", prompt: "Explain it differently." }];
     expect(findQuickAction(duplicated, "Explain")).toBe(duplicated[1]);
+  });
+});
+
+describe("quickActionModelLabel", () => {
+  const named = (id: string) => (id === "anthropic-claude-sonnet-5" ? "Claude Sonnet 5" : undefined);
+
+  it("names Raycast's default when the action pins no model", () => {
+    expect(quickActionModelLabel({ label: "a", prompt: "b" }, named)).toBe("default model");
+  });
+
+  it("uses the catalog's display name for a model it describes", () => {
+    expect(quickActionModelLabel({ label: "a", prompt: "b", model: "anthropic-claude-sonnet-5" }, named)).toBe(
+      "Claude Sonnet 5",
+    );
+  });
+
+  it("falls back to the raw id, since the catalog does not describe every usable model", () => {
+    expect(quickActionModelLabel({ label: "a", prompt: "b", model: "gateway-deepseek/deepseek-v4-flash" }, named)).toBe(
+      "gateway-deepseek/deepseek-v4-flash",
+    );
+  });
+});
+
+describe("setQuickActionModel", () => {
+  const raw = () => [
+    { label: "Translate", prompt: "Translate it.", model: "old-model" },
+    { label: "Explain", prompt: "Explain it." },
+  ];
+
+  it("pins a model on the chosen entry", () => {
+    expect(setQuickActionModel(raw(), 1, "anthropic-claude-opus-5")[1]).toEqual({
+      label: "Explain",
+      prompt: "Explain it.",
+      model: "anthropic-claude-opus-5",
+    });
+  });
+
+  it("removes the key rather than writing an empty one when clearing", () => {
+    expect(setQuickActionModel(raw(), 0, undefined)[0]).toEqual({ label: "Translate", prompt: "Translate it." });
+  });
+
+  it("keeps fields it does not understand, since the setting is hand-edited", () => {
+    const entry = [{ label: "a", prompt: "b", note: "mine" }];
+    expect(setQuickActionModel(entry, 0, "m")[0]).toEqual({ label: "a", prompt: "b", note: "mine", model: "m" });
+  });
+
+  it("leaves the other entries untouched", () => {
+    expect(setQuickActionModel(raw(), 1, "m")[0]).toEqual(raw()[0]);
+  });
+
+  it("does not mutate the array it was given", () => {
+    const original = raw();
+    setQuickActionModel(original, 0, "m");
+    expect(original).toEqual(raw());
+  });
+
+  it("returns the entries unchanged when the index is out of range", () => {
+    expect(setQuickActionModel(raw(), 5, "m")).toEqual(raw());
+    expect(setQuickActionModel("not an array", 0, "m")).toEqual([]);
   });
 });

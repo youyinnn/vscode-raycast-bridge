@@ -31,6 +31,11 @@
         "category": "Raycast"
       },
       {
+        "command": "raycastBridge.selectQuickActionModel",
+        "title": "Select Quick Action Model",
+        "category": "Raycast"
+      },
+      {
         "command": "raycastBridge.diagnose",
         "title": "Diagnose Model Provider",
         "category": "Raycast"
@@ -140,7 +145,7 @@
               },
               "model": {
                 "type": "string",
-                "description": "Raycast model id for this action. Omit to use Raycast's default model."
+                "description": "Raycast model id for this action. Omit to use Raycast's default model. Set it with 'Raycast: Select Quick Action Model' rather than by hand."
               }
             }
           }

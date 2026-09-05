@@ -4,6 +4,7 @@ import { AnswerThread } from "./features/answerThread";
 import { askAI } from "./features/askAI";
 import { registerModelProvider } from "./features/modelProvider";
 import { selectModels } from "./features/selectModels";
+import { selectQuickActionModel } from "./features/selectQuickActionModel";
 import { CatalogStore, migrateDeprecatedModels } from "./features/catalogStore";
 import { diagnose } from "./features/diagnose";
 import { testModel } from "./features/testModel";
@@ -31,12 +32,15 @@ export function activate(context: vscode.ExtensionContext): void {
   hover.register(context);
   const inline = new AnswerThread();
   inline.register(context);
-  registerQuickActions(context, server, log, { hover, inline });
+  registerQuickActions(context, server, log, { hover, inline }, catalog);
 
   context.subscriptions.push(
     vscode.commands.registerCommand("raycastBridge.askAI", () => askAI()),
     vscode.commands.registerCommand("raycastBridge.runCommand", () => runCommand()),
     vscode.commands.registerCommand("raycastBridge.selectModels", () => selectModels(catalog)),
+    vscode.commands.registerCommand("raycastBridge.selectQuickActionModel", () =>
+      selectQuickActionModel(catalog),
+    ),
     vscode.commands.registerCommand("raycastBridge.diagnose", () => diagnose()),
     vscode.commands.registerCommand("raycastBridge.showLog", () => log.show()),
     vscode.commands.registerCommand("raycastBridge.testModel", () => testModel(log, catalog, server)),

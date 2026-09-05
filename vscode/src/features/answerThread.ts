@@ -6,6 +6,8 @@ const CONTROLLER_ID = "raycastBridge.answers";
 const DISMISS_COMMAND = "raycastBridge.dismissAnswer";
 const DISMISS_ALL_COMMAND = "raycastBridge.dismissAllAnswers";
 const PLACEHOLDER = "_Asking Raycast..._";
+/** Names the Comments panel group, and stands in when no model is known. */
+const CONTROLLER_NAME = "Raycast AI";
 
 /**
  * Renders an answer as a comment thread anchored under the selection.
@@ -42,9 +44,13 @@ export class AnswerThread implements AnswerSink {
     const key = anchor(target);
     this.threads.get(key)?.dispose();
 
+    // The comment's author line is where "who answered this" belongs, and
+    // VSCode renders it in bold above the body: the bridge, then the model.
+    const author = target.model ? `${CONTROLLER_NAME} · ${target.model}` : CONTROLLER_NAME;
     const thread = this.ensureController().createCommentThread(target.uri, target.range, [
-      comment(PLACEHOLDER),
+      comment(PLACEHOLDER, author),
     ]);
+    // The title bar says which action ran; the author line says which model.
     thread.label = target.title;
     thread.canReply = false;
     thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
@@ -56,7 +62,7 @@ export class AnswerThread implements AnswerSink {
     // an in-flight request must not write into a block that is gone.
     const render = (body: string) => {
       if (this.threads.get(key) === thread) {
-        thread.comments = [comment(body)];
+        thread.comments = [comment(body, author)];
       }
     };
 
@@ -94,7 +100,7 @@ export class AnswerThread implements AnswerSink {
 
   /** Created on first use, so choosing the hover never adds a Comments panel entry. */
   private ensureController(): vscode.CommentController {
-    this.controller ??= vscode.comments.createCommentController(CONTROLLER_ID, "Raycast AI");
+    this.controller ??= vscode.comments.createCommentController(CONTROLLER_ID, CONTROLLER_NAME);
     return this.controller;
   }
 }
@@ -113,10 +119,12 @@ function anchor({ uri, range }: AnswerTarget): string {
 }
 
 /** Left untrusted deliberately: the body is model output, so no command links. */
-function comment(body: string): vscode.Comment {
+function comment(body: string, author: string): vscode.Comment {
   return {
     body: new vscode.MarkdownString(preserveLineBreaks(body)),
     mode: vscode.CommentMode.Preview,
-    author: { name: "Raycast AI" },
+    // Required by the API, and rendered whatever it holds, so it carries the
+    // model rather than a constant that says nothing.
+    author: { name: author },
   };
 }

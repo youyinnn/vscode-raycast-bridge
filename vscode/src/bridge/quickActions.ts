@@ -78,3 +78,47 @@ export function findQuickAction(actions: QuickAction[], label: unknown): QuickAc
   }
   return actions.find((action) => action.label.toLowerCase() === wanted);
 }
+
+/**
+ * Shown when an action pins no model, and Raycast picks for itself. Worded
+ * without "Raycast", since it is rendered next to the bridge's own name.
+ */
+export const DEFAULT_MODEL_LABEL = "default model";
+
+/**
+ * Names the model an action will use, for display beside its answer.
+ *
+ * `lookup` resolves a model id to Raycast's display name. It returns
+ * `undefined` for ids the catalog does not describe -- the SDK enumerates
+ * models Raycast never publishes metadata for, and those still answer -- so
+ * the id itself is shown rather than hiding the fact that one is pinned.
+ */
+export function quickActionModelLabel(
+  action: QuickAction,
+  lookup: (id: string) => string | undefined,
+): string {
+  if (!action.model) {
+    return DEFAULT_MODEL_LABEL;
+  }
+  return lookup(action.model) ?? action.model;
+}
+
+/**
+ * Pins or clears the model on one entry of the raw `quickActions` setting.
+ *
+ * Works on the raw value rather than parsed actions: parsing drops malformed
+ * entries, which would shift every later index, and it discards fields we do
+ * not read, which writing back would silently delete from a hand-edited file.
+ */
+export function setQuickActionModel(raw: unknown, index: number, model: string | undefined): unknown[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.map((entry, at) => {
+    if (at !== index || typeof entry !== "object" || entry === null) {
+      return entry;
+    }
+    const { model: _dropped, ...rest } = entry as Record<string, unknown>;
+    return model ? { ...rest, model } : rest;
+  });
+}

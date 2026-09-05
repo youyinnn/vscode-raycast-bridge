@@ -1,6 +1,10 @@
 import * as vscode from "vscode";
 
-export type AnswerTarget = { uri: vscode.Uri; range: vscode.Range; title: string };
+/**
+ * `model` is a display name, not an id: it is shown so an answer says which
+ * model produced it, which the action's label alone never revealed.
+ */
+export type AnswerTarget = { uri: vscode.Uri; range: vscode.Range; title: string; model?: string };
 
 /**
  * Where a quick action's answer is rendered.
