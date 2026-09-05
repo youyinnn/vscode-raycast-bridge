@@ -41,6 +41,21 @@ describe("BridgeServer", () => {
     expect(res.status).toBe(404);
   });
 
+  it("unregisters a job without firing its handlers", async () => {
+    let done: DonePayload | undefined;
+    server.register(job, { onChunk: () => undefined, onDone: (result) => (done = result) });
+    server.unregister(job.id);
+
+    expect(server.pending()).toBe(0);
+    expect(done).toBeUndefined();
+    const res = await fetch(`${base}/job/${job.id}`, { headers: auth() });
+    expect(res.status).toBe(404);
+  });
+
+  it("ignores unregistering a job it never had", () => {
+    expect(() => server.unregister("nope")).not.toThrow();
+  });
+
   it("runs a full job lifecycle and forgets the job afterwards", async () => {
     const chunks: string[] = [];
     let done: DonePayload | undefined;

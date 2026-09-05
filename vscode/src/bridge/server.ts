@@ -24,6 +24,9 @@ export class BridgeServer {
   private server: Server | undefined;
   private readonly jobs = new Map<string, Entry>();
 
+  /** Takes a plain callback rather than importing vscode, which this file must not do. */
+  constructor(private readonly log: (message: string) => void = () => undefined) {}
+
   /** Starts listening on an ephemeral loopback port. Idempotent. */
   async listen(): Promise<number> {
     if (this.server) {
@@ -40,7 +43,9 @@ export class BridgeServer {
       });
     });
     this.server = server;
-    return (server.address() as AddressInfo).port;
+    const port = (server.address() as AddressInfo).port;
+    this.log(`listening on 127.0.0.1:${port}`);
+    return port;
   }
 
   register(job: Job, handlers: JobHandlers): void {
@@ -50,6 +55,21 @@ export class BridgeServer {
     }, JOB_TTL_MS);
     timer.unref?.();
     this.jobs.set(job.id, { job, ...handlers, timer });
+    this.log(`job ${job.id} registered (${job.prompt.length} chars, model=${job.model ?? "default"})`);
+  }
+
+  /**
+   * Drops a job without firing its handlers, for when the caller gives up.
+   * Raycast keeps running regardless -- there is no channel to abort it --
+   * so its later POSTs simply 404.
+   */
+  unregister(id: string): void {
+    const entry = this.jobs.get(id);
+    if (!entry) {
+      return;
+    }
+    clearTimeout(entry.timer);
+    this.jobs.delete(id);
   }
 
   pending(): number {
@@ -85,13 +105,16 @@ export class BridgeServer {
 
   private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     if (req.headers.origin) {
+      this.log(`rejected ${req.method} ${req.url}: Origin header present`);
       respond(res, 403, { error: "origin not allowed" });
       return;
     }
     if (!this.authorized(req)) {
+      this.log(`rejected ${req.method} ${req.url}: bad or missing token`);
       respond(res, 401, { error: "unauthorized" });
       return;
     }
+    this.log(`${req.method} ${req.url}`);
 
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     const match = /^\/job\/([^/]+)(?:\/(chunk|done))?$/.exec(url.pathname);
@@ -103,6 +126,7 @@ export class BridgeServer {
     const [, jobId, action] = match;
     const entry = this.jobs.get(jobId);
     if (!entry) {
+      this.log(`404 for unknown job ${jobId}`);
       respond(res, 404, { error: "unknown job" });
       return;
     }
