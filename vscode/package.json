@@ -49,6 +49,27 @@
         "command": "raycastBridge.probeModels",
         "title": "Probe Which Models Work",
         "category": "Raycast"
+      },
+      {
+        "command": "raycastBridge.quickAction",
+        "title": "Run Quick Action on Selection",
+        "category": "Raycast"
+      },
+      {
+        "command": "raycastBridge.copyAnswer",
+        "title": "Copy Last Answer",
+        "category": "Raycast"
+      },
+      {
+        "command": "raycastBridge.dismissAnswer",
+        "title": "Dismiss Answer",
+        "category": "Raycast",
+        "icon": "$(close)"
+      },
+      {
+        "command": "raycastBridge.dismissAllAnswers",
+        "title": "Dismiss All Answers",
+        "category": "Raycast"
       }
     ],
     "languageModelChatProviders": [
@@ -85,6 +106,75 @@
           ],
           "description": "Raycast AI creativity level."
         },
+        "raycastBridge.quickActions": {
+          "type": "array",
+          "default": [
+            {
+              "label": "Translate to Chinese",
+              "prompt": "Translate the following text into Chinese. Output only the translation."
+            },
+            {
+              "label": "Explain",
+              "prompt": "Explain the following in plain language. Be brief."
+            },
+            {
+              "label": "Polish as Academic English",
+              "prompt": "Rewrite the following as clear academic English. Output only the rewritten text."
+            }
+          ],
+          "description": "Actions offered on the editor selection. The answer appears in a hover next to the selection.",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "prompt"
+            ],
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Menu entry text."
+              },
+              "prompt": {
+                "type": "string",
+                "description": "Instruction sent to Raycast AI. The selected text is appended to it. Write {{selection}} to place the text somewhere other than the end, or more than once."
+              },
+              "model": {
+                "type": "string",
+                "description": "Raycast model id for this action. Omit to use Raycast's default model."
+              }
+            }
+          }
+        },
+        "raycastBridge.quickActionsUI": {
+          "type": "string",
+          "default": "both",
+          "enum": [
+            "both",
+            "lightbulb",
+            "codeLens",
+            "none"
+          ],
+          "enumDescriptions": [
+            "Show both the lightbulb entry and the code lens.",
+            "Lightbulb entry only; costs a second click but never shifts the layout.",
+            "Code lens only; one click, but adds a line above the selection.",
+            "Disable quick actions."
+          ],
+          "description": "Where quick actions appear when text is selected."
+        },
+        "raycastBridge.quickActionsDisplay": {
+          "type": "string",
+          "default": "inline",
+          "enum": [
+            "inline",
+            "hover"
+          ],
+          "enumDescriptions": [
+            "A block under the selection. Stays until dismissed, and streams the answer in as it arrives.",
+            "A hover next to the selection. Costs no layout, but a scroll or a click elsewhere dismisses it and the answer only appears once it is complete."
+          ],
+          "description": "How a quick action's answer is shown."
+        },
         "raycastBridge.commands": {
           "type": "array",
           "default": [],
@@ -110,6 +200,29 @@
           }
         }
       }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "raycastBridge.quickAction",
+          "when": "false"
+        },
+        {
+          "command": "raycastBridge.copyAnswer",
+          "when": "false"
+        },
+        {
+          "command": "raycastBridge.dismissAnswer",
+          "when": "false"
+        }
+      ],
+      "comments/commentThread/title": [
+        {
+          "command": "raycastBridge.dismissAnswer",
+          "when": "commentController == raycastBridge.answers",
+          "group": "inline"
+        }
+      ]
     }
   },
   "scripts": {

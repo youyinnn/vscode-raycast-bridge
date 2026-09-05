@@ -1,4 +1,6 @@
 import * as vscode from "vscode";
+import { AnswerHover } from "./features/answerHover";
+import { AnswerThread } from "./features/answerThread";
 import { askAI } from "./features/askAI";
 import { registerModelProvider } from "./features/modelProvider";
 import { selectModels } from "./features/selectModels";
@@ -6,6 +8,7 @@ import { CatalogStore, migrateDeprecatedModels } from "./features/catalogStore";
 import { diagnose } from "./features/diagnose";
 import { testModel } from "./features/testModel";
 import { probeModels } from "./features/probeModels";
+import { registerQuickActions } from "./features/quickActions";
 import { runCommand } from "./features/runCommand";
 import { BridgeServer } from "./bridge/server";
 
@@ -23,6 +26,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const catalog = new CatalogStore(context.globalState, log);
   registerModelProvider(context, server, log, catalog);
   void migrateDeprecatedModels(catalog, log);
+
+  const hover = new AnswerHover();
+  hover.register(context);
+  const inline = new AnswerThread();
+  inline.register(context);
+  registerQuickActions(context, server, log, { hover, inline });
 
   context.subscriptions.push(
     vscode.commands.registerCommand("raycastBridge.askAI", () => askAI()),
