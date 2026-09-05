@@ -3,8 +3,19 @@ import * as vscode from "vscode";
 /**
  * `model` is a display name, not an id: it is shown so an answer says which
  * model produced it, which the action's label alone never revealed.
+ *
+ * `render: false` shows the answer as plain text. Markdown is the default,
+ * but it eats LaTeX's `_` and `\`, refuses to wrap code blocks, and turns a
+ * fenced answer into a horizontally scrolling box, so an action whose output
+ * is meant to be read or copied verbatim can opt out.
  */
-export type AnswerTarget = { uri: vscode.Uri; range: vscode.Range; title: string; model?: string };
+export type AnswerTarget = {
+  uri: vscode.Uri;
+  range: vscode.Range;
+  title: string;
+  model?: string;
+  render?: false;
+};
 
 /**
  * Where a quick action's answer is rendered.

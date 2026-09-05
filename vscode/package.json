@@ -150,7 +150,7 @@
               "prompt": "Rewrite the following as clear academic English. Output only the rewritten text."
             }
           ],
-          "description": "Actions offered on the editor selection. The answer appears in a hover next to the selection. To give one a keyboard shortcut, bind raycastBridge.quickAction with the action's label as an argument in keybindings.json: { \"key\": \"cmd+k t\", \"command\": \"raycastBridge.quickAction\", \"args\": { \"action\": \"Translate to Chinese\" }, \"when\": \"editorHasSelection\" }. The Keyboard Shortcuts editor cannot set arguments, so this binding has to be written by hand.",
+          "description": "Actions offered on the editor selection. The answer appears in a hover next to the selection. To give one a keyboard shortcut, bind raycastBridge.quickAction with the action's label as an argument in keybindings.json: { \"key\": \"cmd+k t\", \"command\": \"raycastBridge.quickAction\", \"args\": { \"action\": \"Translate to Chinese\" }, \"when\": \"editorTextFocus\" }. The Keyboard Shortcuts editor cannot set arguments, so this binding has to be written by hand. A press with nothing selected runs the action on the line the cursor is on.",
           "items": {
             "type": "object",
             "required": [
@@ -169,6 +169,11 @@
               "model": {
                 "type": "string",
                 "description": "Raycast model id for this action. Omit to use Raycast's default model. Set it with 'Raycast: Select Quick Action Model' rather than by hand."
+              },
+              "render": {
+                "type": "boolean",
+                "default": true,
+                "description": "Render the answer as Markdown. Set false to show it verbatim: every line wraps, newlines are kept, and characters such as _ * \\ appear as written, at the cost of bold, lists and code highlighting. Suits actions that rewrite text, such as translation."
               }
             }
           }
@@ -189,6 +194,11 @@
             "Disable quick actions."
           ],
           "description": "Where quick actions appear when text is selected."
+        },
+        "raycastBridge.quickActionsFocus": {
+          "type": "boolean",
+          "default": true,
+          "description": "Move keyboard focus into an inline answer as soon as it appears, so Escape dismisses it right away. Turn off to keep typing in the editor while the answer streams in."
         },
         "raycastBridge.quickActionsDisplay": {
           "type": "string",

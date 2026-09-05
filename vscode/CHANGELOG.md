@@ -3,6 +3,19 @@
 All notable changes to the Raycast Bridge extension are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+- A quick action bound to a key runs on the line the cursor is on when nothing is selected.
+  Bind it with `"when": "editorTextFocus"` rather than `"when": "editorHasSelection"` to
+  reach this.
+
+- An inline answer takes keyboard focus when it appears, so Escape dismisses it without a
+  click first. `raycastBridge.quickActionsFocus` turns this off. Dismissing an answer hands
+  focus back to the editor.
+
+- A quick action can set `"render": false` to show its answer as plain text instead of
+  Markdown: lines wrap, newlines are kept, and LaTeX characters appear as written.
+
 ## [0.1.1] - 2026-09-05
 
 - Escape dismisses the focused inline answer instead of collapsing it.

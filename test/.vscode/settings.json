@@ -1,0 +1,12 @@
+{
+  // sample.tex is a fixture for the quick actions, not a document to build:
+  // never compile on save, and keep only the plain latexmk recipe for manual builds.
+  "latex-workshop.latex.autoBuild.run": "never",
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "latexmk",
+      "tools": ["latexmk"]
+    }
+  ],
+  "latex-workshop.latex.recipe.default": "latexmk"
+}

@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { pickDismissTarget } from "../bridge/dismissTarget";
+import { cursorOnAnswerLine } from "../bridge/focusTarget";
 import { isLongAnswer } from "../bridge/longAnswer";
 import { preserveLineBreaks } from "../bridge/markdown";
 import type { AnswerSession, AnswerSink, AnswerTarget } from "./answerSink";
@@ -7,9 +8,17 @@ import type { AnswerSession, AnswerSink, AnswerTarget } from "./answerSink";
 const CONTROLLER_ID = "raycastBridge.answers";
 const DISMISS_COMMAND = "raycastBridge.dismissAnswer";
 const DISMISS_ALL_COMMAND = "raycastBridge.dismissAllAnswers";
-const PLACEHOLDER = "_Asking Raycast..._";
+const PLACEHOLDER = "Asking Raycast...";
 /** Names the Comments panel group, and stands in when no model is known. */
 const CONTROLLER_NAME = "Raycast AI";
+/**
+ * How long to wait before asking VSCode to focus a new thread. The widget is
+ * built on the main thread after an async hop or two -- more on the first
+ * answer, when the comment controller itself is still being set up -- and
+ * the focus command reports "no comment on this line" as an error notification
+ * if it runs too early.
+ */
+const FOCUS_DELAY_MS = 150;
 /** globalState key: the user declined the offer to lift VSCode's comment height cap. */
 const CAP_PROMPT_DECLINED = "raycastBridge.answerCapPromptDeclined";
 
@@ -56,8 +65,9 @@ export class AnswerThread implements AnswerSink {
     // The comment's author line is where "who answered this" belongs, and
     // VSCode renders it in bold above the body: the bridge, then the model.
     const author = target.model ? `${CONTROLLER_NAME} · ${target.model}` : CONTROLLER_NAME;
+    const markdown = target.render !== false;
     const thread = this.ensureController().createCommentThread(target.uri, target.range, [
-      comment(PLACEHOLDER, author),
+      comment(PLACEHOLDER, author, markdown),
     ]);
     // The title bar says which action ran; the author line says which model.
     thread.label = target.title;
@@ -66,12 +76,13 @@ export class AnswerThread implements AnswerSink {
     // Gates the Dismiss button's `when` clause in the thread's title bar.
     thread.contextValue = CONTROLLER_ID;
     this.threads.set(key, thread);
+    void this.focusSoon(key, thread, target);
 
     // Guarded against this thread having been dismissed or replaced already:
     // an in-flight request must not write into a block that is gone.
     const render = (body: string) => {
       if (this.threads.get(key) === thread) {
-        thread.comments = [comment(body, author)];
+        thread.comments = [comment(body, author, markdown)];
       }
     };
 
@@ -91,11 +102,40 @@ export class AnswerThread implements AnswerSink {
     for (const [key, open] of this.threads) {
       if (open === thread) {
         this.remove(key, open);
+        this.refocusEditor();
         return;
       }
     }
     // Not one of ours to track, but the user still asked for it to go.
     thread?.dispose();
+  }
+
+  /**
+   * Moves keyboard focus into the thread once VSCode has rendered it, so
+   * Escape dismisses it without a click first. There is no stable API for
+   * this; the built-in command that focuses the comment under the cursor is
+   * the nearest thing, and the cursor is still on the answer's line because
+   * the action was just run on that selection.
+   */
+  private async focusSoon(key: string, thread: vscode.CommentThread, target: AnswerTarget): Promise<void> {
+    if (!vscode.workspace.getConfiguration("raycastBridge").get<boolean>("quickActionsFocus", true)) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, FOCUS_DELAY_MS));
+    const editor = vscode.window.activeTextEditor;
+    const active = editor && { uri: editor.document.uri.toString(), line: editor.selection.end.line };
+    if (
+      this.threads.get(key) !== thread ||
+      !cursorOnAnswerLine(active, { uri: target.uri.toString(), endLine: target.range.end.line })
+    ) {
+      return;
+    }
+    await vscode.commands.executeCommand("workbench.action.focusCommentOnCurrentLine");
+  }
+
+  /** Disposing a focused thread leaves focus nowhere; hand it back to the editor. */
+  private refocusEditor(): void {
+    void vscode.commands.executeCommand("workbench.action.focusActiveEditorGroup");
   }
 
   /**
@@ -177,10 +217,14 @@ function anchor({ uri, range }: AnswerTarget): string {
   return `${uri.toString()}#${range.start.line}:${range.start.character}-${range.end.line}:${range.end.character}`;
 }
 
-/** Left untrusted deliberately: the body is model output, so no command links. */
-function comment(body: string, author: string): vscode.Comment {
+/**
+ * Left untrusted deliberately: the body is model output, so no command links.
+ * A plain string body is shown verbatim by VSCode, wrapped and with its
+ * newlines intact, so it needs none of the Markdown line-break repair.
+ */
+function comment(body: string, author: string, markdown: boolean): vscode.Comment {
   return {
-    body: new vscode.MarkdownString(preserveLineBreaks(body)),
+    body: markdown ? new vscode.MarkdownString(preserveLineBreaks(body)) : body,
     mode: vscode.CommentMode.Preview,
     // Required by the API, and rendered whatever it holds, so it carries the
     // model rather than a constant that says nothing.

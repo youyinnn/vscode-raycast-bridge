@@ -6,19 +6,29 @@ actions on your selection, and fire any Raycast command from the editor.
 Raycast exposes no API to other processes, so this extension pairs with a small companion
 Raycast extension that lives in the same repository. See [Setup](#setup).
 
+![A quick action answering under the selection](https://github.com/youyinnn/vscode-raycast-bridge/raw/main/vscode/img/quickaction.gif)
+
+*A quick action on the editor selection: the answer streams in underneath and says which
+model answered.*
+
 ## Features
 
 **Raycast AI in the Chat view.** Raycast's models appear in the chat model picker under the
 `Raycast AI` vendor. Pick one and chat as with any other model. `Raycast: Select Chat Models`
 chooses which models are offered.
 
+![Raycast models in the Chat view](https://github.com/youyinnn/vscode-raycast-bridge/raw/main/vscode/img/chat.gif)
+
 **Ask AI.** `Raycast: Ask AI` sends the selection, or the whole file, to the Chat view with an
 instruction you type.
 
 **Quick actions on the selection.** Select text and a lightbulb entry and a code lens offer
 actions such as *Translate to Chinese*, *Explain* and *Polish as Academic English*. The answer
-streams in under the selection, or into a hover. Click into an inline answer and press
-Escape to dismiss it. VS Code caps a comment thread at about 20 lines and does not
+streams in under the selection, or into a hover. Answers render as Markdown; give an
+action `"render": false` to show its answer verbatim instead, which suits rewrites of
+LaTeX or code where Markdown would eat characters or refuse to wrap. An inline answer takes keyboard focus when it
+appears, so Escape dismisses it; set `raycastBridge.quickActionsFocus` to false to keep
+focus in the editor. VS Code caps a comment thread at about 20 lines and does not
 refresh its scrollbar after that, so the first time an answer is longer the extension
 offers to turn off `comments.maxHeight`, which lets answers expand in full. Each action has its own prompt and can pin
 its own model with `Raycast: Select Quick Action Model`. Bind one to a key by writing a
@@ -29,9 +39,13 @@ keybinding by hand:
   "key": "cmd+k t",
   "command": "raycastBridge.quickAction",
   "args": { "action": "Translate to Chinese" },
-  "when": "editorHasSelection"
+  "when": "editorTextFocus"
 }
 ```
+
+A key press with nothing selected runs the action on the line the cursor is on, so short
+edits need no selecting first. The lightbulb and the code lens still wait for a real
+selection, since either would otherwise offer itself on every line of every file.
 
 **Run Raycast commands.** `Raycast: Run Command` fires any deeplink listed in
 `raycastBridge.commands`, optionally injecting the selection.
@@ -64,6 +78,8 @@ keybinding by hand:
    ids the installed Raycast actually honours.
 
 ## Commands
+
+![The Raycast commands in the command palette](https://github.com/youyinnn/vscode-raycast-bridge/raw/main/vscode/img/commands.png)
 
 | Command | What it does |
 | --- | --- |

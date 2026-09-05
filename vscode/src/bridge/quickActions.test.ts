@@ -204,3 +204,20 @@ describe("setQuickActionModel", () => {
     expect(setQuickActionModel("not an array", 0, "m")).toEqual([]);
   });
 });
+
+describe("parseQuickActions render flag", () => {
+  it("keeps an explicit render: false", () => {
+    expect(parseQuickActions([{ label: "a", prompt: "p", render: false }])).toEqual([
+      { label: "a", prompt: "p", render: false },
+    ]);
+  });
+
+  it("omits the flag when rendering is the default", () => {
+    expect(parseQuickActions([{ label: "a", prompt: "p" }])).toEqual([{ label: "a", prompt: "p" }]);
+    expect(parseQuickActions([{ label: "a", prompt: "p", render: true }])).toEqual([{ label: "a", prompt: "p" }]);
+  });
+
+  it("ignores a render value that is not a boolean", () => {
+    expect(parseQuickActions([{ label: "a", prompt: "p", render: "no" }])).toEqual([{ label: "a", prompt: "p" }]);
+  });
+});

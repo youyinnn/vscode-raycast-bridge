@@ -70,7 +70,13 @@ export class AnswerHover implements vscode.HoverProvider, AnswerSink {
     const heading = [`**${answer.target.title}**`, answer.target.model, `[Copy](command:${COPY_COMMAND})`]
       .filter(Boolean)
       .join(" · ");
-    content.appendMarkdown(`${heading}\n\n${preserveLineBreaks(answer.body)}`);
+    content.appendMarkdown(`${heading}\n\n`);
+    if (answer.target.render === false) {
+      // Escaped rather than rendered: a hover has no plain-text mode.
+      content.appendText(answer.body);
+    } else {
+      content.appendMarkdown(preserveLineBreaks(answer.body));
+    }
     return new vscode.Hover(content, answer.target.range);
   }
 

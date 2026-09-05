@@ -7,6 +7,7 @@ import {
   quickActionModelLabel,
   type QuickAction,
 } from "../bridge/quickActions";
+import { selectionOrCursorLine, type RangeTuple } from "../bridge/selectionTarget";
 import type { BridgeServer } from "../bridge/server";
 import type { AnswerSink } from "./answerSink";
 import type { CatalogStore } from "./catalogStore";
@@ -21,12 +22,12 @@ export type AnswerSinks = { hover: AnswerSink; inline: AnswerSink };
  * A `Uri` or `Range` would arrive as an anonymous object with no methods, so
  * both are passed as plain data and rebuilt on the far side.
  */
-type RunArgs = { index: number; uri: string; range: [number, number, number, number] };
+type RunArgs = { index: number; uri: string; range: RangeTuple };
 
 /**
  * What a keybinding can supply. A keybinding has no editor, document or
  * selection to hand over, only the literal `args` object from
- * keybindings.json, so it names the action by label and the selection is
+ * keybindings.json, so it names the action by label and the text to act on is
  * resolved from the active editor at press time.
  */
 type KeyArgs = { action: unknown };
@@ -161,11 +162,26 @@ async function runByLabel(
     return;
   }
   const editor = vscode.window.activeTextEditor;
-  if (!editor || editor.selection.isEmpty) {
-    void vscode.window.showWarningMessage("Raycast: select some text first.");
+  if (!editor) {
+    void vscode.window.showWarningMessage("Raycast: open a file first.");
     return;
   }
-  await run(runArgs(actions.indexOf(action), editor.document.uri, editor.selection), server, log, sinks, catalog);
+  // With nothing selected the line the cursor is on is what the key press
+  // meant. The lightbulb and the code lens still ask for a real selection:
+  // both would otherwise offer themselves on every line of every file.
+  const line = editor.document.lineAt(editor.selection.start.line);
+  const range = selectionOrCursorLine(tuple(editor.selection), line.text.length);
+  if (!editor.document.getText(new vscode.Range(...range)).trim()) {
+    void vscode.window.showWarningMessage("Raycast: select some text, or put the cursor on a line that has some.");
+    return;
+  }
+  await run(
+    { index: actions.indexOf(action), uri: editor.document.uri.toString(), range },
+    server,
+    log,
+    sinks,
+    catalog,
+  );
 }
 
 async function run(
@@ -204,7 +220,13 @@ async function run(
   // Named from the catalog already in memory: a quick action must not wait on
   // a network fetch just to label its own answer.
   const model = quickActionModelLabel(action, (id) => catalog.find(id)?.name);
-  const session = display(sinks).open({ uri, range, title: action.label, model });
+  const session = display(sinks).open({
+    uri,
+    range,
+    title: action.label,
+    model,
+    ...(action.render === false ? { render: false } : {}),
+  });
 
   // Window progress, not a notification: a notification takes focus, and
   // `editor.action.showHover` is a no-op unless the editor still has it.
@@ -237,11 +259,11 @@ async function run(
 }
 
 function runArgs(index: number, uri: vscode.Uri, range: vscode.Range): RunArgs {
-  return {
-    index,
-    uri: uri.toString(),
-    range: [range.start.line, range.start.character, range.end.line, range.end.character],
-  };
+  return { index, uri: uri.toString(), range: tuple(range) };
+}
+
+function tuple(range: vscode.Range): RangeTuple {
+  return [range.start.line, range.start.character, range.end.line, range.end.character];
 }
 
 function quickActions(): QuickAction[] {
