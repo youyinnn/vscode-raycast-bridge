@@ -13,6 +13,8 @@ npx vitest run src/bridge/server.test.ts # single file
 npx vitest run -t "rejects a browser"    # single test by name
 npm run build                            # esbuild bundle -> dist/extension.js
 npm run gen:models                       # regenerate src/models.sdk.ts from @raycast/api
+npm run package                          # vsce package -> vscode-raycast-bridge-<version>.vsix (runs typecheck+test+build first)
+npm run publish                          # vsce publish; needs `npx vsce login Jun` once
 
 # Raycast side
 cd raycast
@@ -98,6 +100,16 @@ Breaking any of these produces silence, not an error.
 - **Probe verdicts are keyed `raycast@<app>/sdk@<sdk>/probe@<method>`** and `CatalogStore` caches
   the raw payload, re-parsing on read. Bump `PROBE_METHOD` in `bridge/fallback.ts` whenever the
   probe's prompt or judgement changes, or stale conclusions outlive the logic that made them.
+
+## Publishing
+
+The Marketplace publisher is `Jun` (same as latex-non-academic-word-check), not the GitHub
+handle. `engines.vscode` and `@types/vscode` are pinned to `^1.104.0`: that is where the
+Language Model Chat Provider API went stable, and the source typechecks against the 1.104.0
+typings. Bumping `@types/vscode` alone makes vsce refuse to package. No `activationEvents`
+are declared on purpose: VS Code derives `onLanguageModelChatProvider:raycast` from the
+`languageModelChatProviders` contribution and `onCommand:*` from the commands. Only
+`vscode/README.md` reaches the Marketplace; the root README is for the repo.
 
 ## Security model
 

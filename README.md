@@ -1,13 +1,21 @@
-# vscode-raycast
+# vscode-raycast-bridge
 
-Run Raycast commands and Raycast AI from inside VSCode.
+Run Raycast AI and Raycast commands from inside VS Code.
 
-Raycast exposes no API to external processes: `raycast://` deeplinks are the only
-supported entry point, and they are one-way with no return value. This repo therefore
-ships a **pair** of extensions:
+This repository holds two extensions that only work together:
 
-- `vscode/` - the VSCode extension. Owns a loopback HTTP server and fires deeplinks.
-- `raycast/` - the companion Raycast extension. Executes the work and streams results back.
+- [`vscode/`](vscode/) - the VS Code extension, published to the Marketplace as
+  **Raycast Bridge** (`Jun.vscode-raycast-bridge`). Its [README](vscode/README.md) is the
+  user-facing documentation: features, setup, commands and settings.
+- [`raycast/`](raycast/) - the companion Raycast extension. It executes the work and streams
+  results back. It is not on the Raycast Store; users import it once with `ray develop`.
+
+## Why two extensions
+
+Raycast exposes no API to external processes. `raycast://` deeplinks are the only supported
+entry point, they are one-way, and Raycast unloads a command's process as soon as it finishes,
+so the Raycast side cannot host anything long-lived. The VS Code extension host can, so the
+server lives there and Raycast connects back into it:
 
 ```
 VSCode ──raycast:// deeplink (jobId, port, token)──▶ Raycast command
@@ -16,96 +24,50 @@ VSCode ──raycast:// deeplink (jobId, port, token)──▶ Raycast command
                   (127.0.0.1, token-authenticated)
 ```
 
-The server lives on the VSCode side because Raycast unloads command processes as soon
-as they finish, so it cannot host anything long-lived. The VSCode extension host can.
+Only the job id, port and token travel through the URL. The prompt and the answer go over
+HTTP, which sidesteps URL length limits and makes streaming possible.
 
-## Requirements
+## Install
 
-- macOS (Raycast is macOS only; the bridge shells out to `open`)
-- Raycast **Pro** for the AI features (`AI.ask` throws without it)
-- Node 20+
-
-## Setup
-
-```bash
-cd raycast && npm install && npx ray develop     # imports the extension into Raycast
-cd ../vscode && npm install && npm run build
-```
-
-`ray develop` only needs to run once to import the extension. It stays registered in
-Raycast after you stop the process; you do not need a terminal open to use the bridge.
-
-Then in VSCode press F5 (or point a dev host at `vscode/`) and set your Raycast handle:
-
-```json
-{ "raycastBridge.owner": "your-raycast-handle" }
-```
-
-The first deeplink triggers a Raycast confirmation dialog. **Choose "Always"** - after
-that every launch is silent.
-
-## Commands
-
-| Command | What it does |
-| --- | --- |
-| `Raycast: Ask AI` | Sends the selection (or whole file) to Raycast AI, streams the answer into a new markdown document |
-| `Raycast: Run Command` | Fires any configured Raycast deeplink, optionally injecting the selection |
-
-## Configuration
-
-| Setting | Default | Notes |
-| --- | --- | --- |
-| `raycastBridge.owner` | - | Your Raycast Store handle, used as the `<author-or-owner>` deeplink segment |
-| `raycastBridge.model` | `""` | Raycast AI model id, e.g. `anthropic-claude-sonnet-4-6`. Empty uses the Raycast default |
-| `raycastBridge.creativity` | `none` | `none` / `low` / `medium` / `high` / `maximum` |
-| `raycastBridge.commands` | `[]` | Commands offered by `Raycast: Run Command` |
-
-Raycast has no API to enumerate installed extensions (the local database is encrypted),
-so `raycastBridge.commands` must be filled in by hand. Get each URL from Raycast's
-**Copy Deeplink** action in root search:
-
-```json
-{
-  "raycastBridge.commands": [
-    {
-      "label": "Search Notes",
-      "deeplink": "raycast://extensions/raycast/raycast-notes/search-notes",
-      "passSelectionAs": "fallbackText"
-    }
-  ]
-}
-```
-
-`passSelectionAs` accepts `fallbackText`, `argument:<name>`, or `context:<key>`.
-
-## Security
-
-The loopback server is reachable by any local process, so without authentication anything
-on the machine could inject text into your editor. Mitigations:
-
-- binds `127.0.0.1` only, on an OS-assigned ephemeral port
-- per-session random token, compared with `timingSafeEqual`
-- requests carrying an `Origin` header are rejected (blocks browser-driven DNS rebinding;
-  Raycast's own fetch sends no Origin)
-- jobs are deleted on completion and expire after 5 minutes
-
-## Known limits
-
-- **Raycast AI quota: 10 requests/minute, 100/hour.** Heavy use hits this quickly.
-- Installed Raycast extensions cannot be enumerated; command lists are manual.
-- The Raycast side is installed via `ray develop`, so it is a personal tool unless published.
-- A dev extension's deeplink identity is fixed at **first import**. Changing `author` in
-  `package.json` afterwards does not move it: `ray develop` rebuilds the code but Raycast keeps
-  serving the original `<author>` segment. To change it, remove the extension in Raycast and
-  re-import.
+Users: install **Raycast Bridge** from the VS Code Marketplace, then follow the Setup section
+of [vscode/README.md](vscode/README.md) to import the Raycast side.
 
 ## Development
 
 ```bash
-cd vscode && npm test        # 15 tests, no VSCode host required
-cd vscode && npm run typecheck
-cd raycast && npx tsc --noEmit
+# Raycast side: build and import into Raycast, then Ctrl+C once it shows up
+cd raycast && npm install && npx ray develop
+
+# VS Code side
+cd vscode && npm install
+npm run typecheck
+npm test                 # vitest, no VS Code host needed
+npm run build            # esbuild bundle -> dist/extension.js
 ```
 
-`src/bridge/server.ts` deliberately has no `vscode` import so it can be tested against a
-real HTTP client.
+Then press F5 in this folder to launch an Extension Development Host with `vscode/` loaded.
+
+Things that bite:
+
+- `src/bridge/` must not import `vscode`; its tests drive it with real HTTP.
+- `protocol.ts` is duplicated by hand in `vscode/src/bridge/` and `raycast/src/`.
+- A dev Raycast extension's deeplink identity is fixed at first import. Changing `author`
+  afterwards does nothing until the extension is removed inside Raycast and imported again.
+- Keep the Raycast app and `@raycast/api` on the same major line, then run
+  `npm run gen:models` and `Raycast: Probe Which Models Work`.
+- There is no automated end-to-end test. Each real run spends Raycast AI quota
+  (10/minute, 100/hour). Use `Raycast: Test Model Directly` instead.
+
+## Release
+
+```bash
+cd vscode
+npm version minor          # or patch; update CHANGELOG.md first
+npm run package            # writes vscode-raycast-bridge-<version>.vsix, runs typecheck+test+build first
+npx vsce login Jun         # once per machine, needs a Marketplace PAT
+npm run publish
+```
+
+## License
+
+MIT

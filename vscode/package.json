@@ -1,17 +1,40 @@
 {
   "name": "vscode-raycast-bridge",
   "displayName": "Raycast Bridge",
-  "description": "Run Raycast commands and Raycast AI from VSCode.",
-  "version": "0.0.1",
-  "publisher": "yinnnyou",
+  "description": "Use Raycast AI as a chat model in VS Code, and run Raycast commands and AI quick actions on your selection.",
+  "version": "0.1.0",
+  "publisher": "Jun",
   "license": "MIT",
-  "private": true,
+  "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/youyinnn/vscode-raycast-bridge.git",
+    "directory": "vscode"
+  },
+  "bugs": {
+    "url": "https://github.com/youyinnn/vscode-raycast-bridge/issues"
+  },
+  "homepage": "https://github.com/youyinnn/vscode-raycast-bridge#readme",
   "engines": {
-    "vscode": "^1.96.0"
+    "vscode": "^1.104.0"
   },
   "categories": [
+    "AI",
+    "Chat",
     "Other"
   ],
+  "keywords": [
+    "raycast",
+    "raycast ai",
+    "chat",
+    "language model",
+    "copilot",
+    "macos"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e24",
+    "theme": "dark"
+  },
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
@@ -231,15 +254,19 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "npm run typecheck && npm test && npm run build",
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --target=node20",
     "watch": "npm run build -- --sourcemap --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "gen:models": "node scripts/generate-sdk-models.mjs"
+    "gen:models": "node scripts/generate-sdk-models.mjs",
+    "package": "vsce package",
+    "publish": "vsce publish"
   },
   "devDependencies": {
     "@types/node": "^22.13.10",
-    "@types/vscode": "^1.96.0",
+    "@types/vscode": "^1.104.0",
+    "@vscode/vsce": "^3.9.2",
     "esbuild": "^0.25.0",
     "typescript": "^5.8.2",
     "vitest": "^3.0.0"

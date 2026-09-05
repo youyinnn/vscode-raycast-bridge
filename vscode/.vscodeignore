@@ -1,0 +1,10 @@
+# Only dist/, package.json, README.md, CHANGELOG.md, LICENSE and icon.png ship.
+.vscode/**
+src/**
+scripts/**
+node_modules/**
+tsconfig.json
+*.tsbuildinfo
+*.vsix
+**/*.map
+**/*.test.ts
