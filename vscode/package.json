@@ -122,7 +122,7 @@
               "prompt": "Rewrite the following as clear academic English. Output only the rewritten text."
             }
           ],
-          "description": "Actions offered on the editor selection. The answer appears in a hover next to the selection.",
+          "description": "Actions offered on the editor selection. The answer appears in a hover next to the selection. To give one a keyboard shortcut, bind raycastBridge.quickAction with the action's label as an argument in keybindings.json: { \"key\": \"cmd+k t\", \"command\": \"raycastBridge.quickAction\", \"args\": { \"action\": \"Translate to Chinese\" }, \"when\": \"editorHasSelection\" }. The Keyboard Shortcuts editor cannot set arguments, so this binding has to be written by hand.",
           "items": {
             "type": "object",
             "required": [
@@ -132,7 +132,7 @@
             "properties": {
               "label": {
                 "type": "string",
-                "description": "Menu entry text."
+                "description": "Menu entry text, and the name a keyboard shortcut binds to. Matched ignoring case."
               },
               "prompt": {
                 "type": "string",

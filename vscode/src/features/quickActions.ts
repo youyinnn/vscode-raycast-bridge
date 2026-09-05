@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { askRaycast } from "../bridge/ask";
-import { buildQuickPrompt, parseQuickActions, type QuickAction } from "../bridge/quickActions";
+import { buildQuickPrompt, findQuickAction, parseQuickActions, type QuickAction } from "../bridge/quickActions";
 import type { BridgeServer } from "../bridge/server";
 import type { AnswerSink } from "./answerSink";
 
@@ -15,6 +15,18 @@ export type AnswerSinks = { hover: AnswerSink; inline: AnswerSink };
  * both are passed as plain data and rebuilt on the far side.
  */
 type RunArgs = { index: number; uri: string; range: [number, number, number, number] };
+
+/**
+ * What a keybinding can supply. A keybinding has no editor, document or
+ * selection to hand over, only the literal `args` object from
+ * keybindings.json, so it names the action by label and the selection is
+ * resolved from the active editor at press time.
+ */
+type KeyArgs = { action: unknown };
+
+function isKeyArgs(args: RunArgs | KeyArgs | undefined): args is KeyArgs {
+  return !!args && "action" in args;
+}
 
 /** Recomputing lenses relayouts the document, and dragging a selection fires per pixel. */
 const SELECTION_DEBOUNCE_MS = 150;
@@ -32,7 +44,9 @@ export function registerQuickActions(
       providedCodeActionKinds: [vscode.CodeActionKind.RefactorRewrite],
     }),
     vscode.languages.registerCodeLensProvider("*", provider),
-    vscode.commands.registerCommand(RUN_COMMAND, (args: RunArgs) => run(args, server, log, sinks)),
+    vscode.commands.registerCommand(RUN_COMMAND, (args: RunArgs | KeyArgs | undefined) =>
+      isKeyArgs(args) ? runByLabel(args.action, server, log, sinks) : run(args as RunArgs, server, log, sinks),
+    ),
   );
 }
 
@@ -113,6 +127,34 @@ class QuickActionProvider implements vscode.CodeActionProvider, vscode.CodeLensP
     clearTimeout(this.refresh);
     this.refresh = setTimeout(() => this.changed.fire(), SELECTION_DEBOUNCE_MS);
   }
+}
+
+/**
+ * The keybinding entry point: `{ "action": "<label>" }` in keybindings.json.
+ *
+ * Every failure here is announced. A key press that quietly does nothing is
+ * indistinguishable from a broken binding, and the label is hand-typed into a
+ * file VSCode does not validate.
+ */
+async function runByLabel(
+  label: unknown,
+  server: BridgeServer,
+  log: vscode.LogOutputChannel,
+  sinks: AnswerSinks,
+): Promise<void> {
+  const actions = quickActions();
+  const action = findQuickAction(actions, label);
+  if (!action) {
+    const named = typeof label === "string" && label.trim() ? `"${label.trim()}"` : "that";
+    void vscode.window.showWarningMessage(`Raycast: no quick action named ${named}.`);
+    return;
+  }
+  const editor = vscode.window.activeTextEditor;
+  if (!editor || editor.selection.isEmpty) {
+    void vscode.window.showWarningMessage("Raycast: select some text first.");
+    return;
+  }
+  await run(runArgs(actions.indexOf(action), editor.document.uri, editor.selection), server, log, sinks);
 }
 
 async function run(

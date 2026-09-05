@@ -62,3 +62,19 @@ export function buildQuickPrompt(action: QuickAction, selection: string): string
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
+
+/**
+ * Resolves the action a keybinding names.
+ *
+ * Keybindings carry a label rather than a position, so reordering the setting
+ * does not silently repoint a key at a different action. Matching is
+ * case-insensitive because the label is retyped by hand into keybindings.json,
+ * where a mismatch would fail silently at press time.
+ */
+export function findQuickAction(actions: QuickAction[], label: unknown): QuickAction | undefined {
+  const wanted = text(label).toLowerCase();
+  if (!wanted) {
+    return undefined;
+  }
+  return actions.find((action) => action.label.toLowerCase() === wanted);
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_SELECTION_CHARS, buildQuickPrompt, parseQuickActions } from "./quickActions";
+import { MAX_SELECTION_CHARS, buildQuickPrompt, findQuickAction, parseQuickActions } from "./quickActions";
 
 describe("parseQuickActions", () => {
   it("returns nothing when the setting is not an array", () => {
@@ -102,5 +102,39 @@ describe("buildQuickPrompt", () => {
     expect(buildQuickPrompt(action("Explain:\n\n{{selection}}"), huge)).toBe(
       `Explain:\n\n${"x".repeat(MAX_SELECTION_CHARS)}`,
     );
+  });
+});
+
+describe("findQuickAction", () => {
+  const actions = [
+    { label: "Translate to Chinese", prompt: "Translate it." },
+    { label: "Explain", prompt: "Explain it." },
+  ];
+
+  it("finds the action whose label matches", () => {
+    expect(findQuickAction(actions, "Explain")).toBe(actions[1]);
+  });
+
+  it("ignores surrounding whitespace in the requested label", () => {
+    expect(findQuickAction(actions, "  Explain  ")).toBe(actions[1]);
+  });
+
+  it("ignores case, so a keybinding need not reproduce it exactly", () => {
+    expect(findQuickAction(actions, "translate TO chinese")).toBe(actions[0]);
+  });
+
+  it("returns undefined when no label matches", () => {
+    expect(findQuickAction(actions, "Summarise")).toBeUndefined();
+  });
+
+  it("returns undefined for a label that is not a non-empty string", () => {
+    expect(findQuickAction(actions, "   ")).toBeUndefined();
+    expect(findQuickAction(actions, undefined)).toBeUndefined();
+    expect(findQuickAction(actions, 1)).toBeUndefined();
+  });
+
+  it("takes the first of two actions sharing a label", () => {
+    const duplicated = [...actions, { label: "Explain", prompt: "Explain it differently." }];
+    expect(findQuickAction(duplicated, "Explain")).toBe(duplicated[1]);
   });
 });
