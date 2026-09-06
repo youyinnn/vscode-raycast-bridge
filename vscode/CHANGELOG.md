@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-09-06
+
+- Every quick action answer offers Regenerate, not only one replayed from the cache. A first
+  answer can be a bad draw as easily as a cached one, and the inline thread shows the button
+  from the moment it opens, so a request that is answering slowly can be restarted too.
+
 ## [0.2.1] - 2026-09-06
 
 - An inline answer no longer lands between the halves of the line it is answering about

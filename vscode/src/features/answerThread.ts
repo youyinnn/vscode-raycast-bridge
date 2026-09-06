@@ -6,8 +6,8 @@ import { preserveLineBreaks } from "../bridge/markdown";
 import type { AnswerSession, AnswerSink, AnswerTarget } from "./answerSink";
 
 const CONTROLLER_ID = "raycastBridge.answers";
-/** `contextValue` for a replayed answer, which alone offers Regenerate. */
-const RERUNNABLE_CONTEXT = "raycastBridge.answers.cached";
+/** `contextValue` for a thread whose title bar offers Regenerate. */
+const RERUNNABLE_CONTEXT = "raycastBridge.answers.rerunnable";
 const DISMISS_COMMAND = "raycastBridge.dismissAnswer";
 const DISMISS_ALL_COMMAND = "raycastBridge.dismissAllAnswers";
 const PLACEHOLDER = "Asking Raycast...";
@@ -89,9 +89,9 @@ export class AnswerThread implements AnswerSink {
     thread.label = target.title;
     thread.canReply = false;
     thread.collapsibleState = vscode.CommentThreadCollapsibleState.Expanded;
-    // Gates the title bar buttons' `when` clauses. Regenerate is offered only
-    // on a replayed answer: on a fresh one it would just repeat the call that
-    // has this second finished.
+    // Gates the title bar buttons' `when` clauses. Set from the start, while
+    // the placeholder is still showing: a request that is answering slowly is
+    // the other moment someone reaches for Regenerate.
     thread.contextValue = target.regenerate ? RERUNNABLE_CONTEXT : CONTROLLER_ID;
     this.threads.set(key, thread);
     if (target.regenerate) {

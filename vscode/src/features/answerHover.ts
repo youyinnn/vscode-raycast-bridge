@@ -77,8 +77,8 @@ export class AnswerHover implements vscode.HoverProvider, AnswerSink {
     // The model is outside the bold run: the action's name is what the reader
     // is looking for, and the model is the footnote that says who answered.
     // "cached" is said out loud: an answer that arrives instantly is otherwise
-    // indistinguishable from a very fast one, and the offer to redo it only
-    // makes sense once the reader knows this one was not just generated.
+    // indistinguishable from a very fast one, and Regenerate reads differently
+    // once the reader knows this one was not just generated.
     const heading = [
       `**${answer.target.title}**`,
       answer.target.model,

@@ -63,7 +63,7 @@ export function registerQuickActions(context: vscode.ExtensionContext, deps: Qui
       isKeyArgs(args) ? runByLabel(args.action, deps) : run(args as RunArgs, deps),
     ),
     // Owned here rather than by a sink: a command id may only be registered
-    // once, and either sink can be the one showing the replayed answer.
+    // once, and either sink can be the one showing the answer.
     vscode.commands.registerCommand(REGENERATE_COMMAND, (arg?: unknown) =>
       (deps.sinks.inline.rerun(arg) ?? deps.sinks.hover.rerun(arg))?.(),
     ),
@@ -183,7 +183,7 @@ async function runByLabel(label: unknown, deps: QuickActionDeps): Promise<void> 
 
 /**
  * `fresh` skips the cache and overwrites it: what the Regenerate affordance
- * on a replayed answer asks for.
+ * asks for.
  */
 async function run(args: RunArgs, deps: QuickActionDeps, fresh = false): Promise<void> {
   const { server, log, sinks, catalog, cache } = deps;
@@ -216,11 +216,15 @@ async function run(args: RunArgs, deps: QuickActionDeps, fresh = false): Promise
   // Named from the catalog already in memory: a quick action must not wait on
   // a network fetch just to label its own answer.
   const model = quickActionModelLabel(action, (id) => catalog.find(id)?.name);
+  // Every answer offers a rerun, replayed or not: a first answer can be a bad
+  // draw of the dice as easily as a cached one, and the cost of finding out is
+  // one click either way.
   const shape = {
     uri,
     range,
     title: action.label,
     model,
+    regenerate: () => void run(args, deps, true),
     ...(action.render === false ? { render: false as const } : {}),
   };
 
@@ -238,11 +242,7 @@ async function run(args: RunArgs, deps: QuickActionDeps, fresh = false): Promise
     const stored = await cache.take(key);
     if (stored) {
       log.info(`quick action "${action.label}" served from cache`);
-      const replay = display(sinks).open({
-        ...shape,
-        cached: true,
-        regenerate: () => void run(args, deps, true),
-      });
+      const replay = display(sinks).open({ ...shape, cached: true });
       await replay.done(stored);
       return;
     }

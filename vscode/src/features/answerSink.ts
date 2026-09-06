@@ -9,9 +9,10 @@ import * as vscode from "vscode";
  * fenced answer into a horizontally scrolling box, so an action whose output
  * is meant to be read or copied verbatim can opt out.
  *
- * `cached` and `regenerate` come as a pair, set when the answer was replayed
- * from an earlier run rather than asked for again. A sink is told only that
- * there is a rerun available; it never learns what a cache is.
+ * `cached` marks an answer replayed from an earlier run rather than asked for
+ * again. `regenerate` is independent of it: every answer may be asked again,
+ * so a sink is told only that there is a rerun available and never learns what
+ * a cache is.
  */
 export type AnswerTarget = {
   uri: vscode.Uri;
