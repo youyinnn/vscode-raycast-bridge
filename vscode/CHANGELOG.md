@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-09-06
+
 - An inline answer no longer lands between the halves of the line it is answering about
   when word wrap is on. VSCode places a comment thread after the visual row that holds the
   midpoint of the thread's range, so a whole-line range put the answer halfway along the

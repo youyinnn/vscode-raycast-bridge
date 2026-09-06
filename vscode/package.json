@@ -2,7 +2,7 @@
   "name": "vscode-raycast-bridge",
   "displayName": "Raycast Bridge",
   "description": "Use Raycast AI as a chat model in VS Code, and run Raycast commands and AI quick actions on your selection.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "Jun",
   "license": "MIT",
   "icon": "icon.png",
