@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- An inline answer no longer lands between the halves of the line it is answering about
+  when word wrap is on. VSCode places a comment thread after the visual row that holds the
+  midpoint of the thread's range, so a whole-line range put the answer halfway along the
+  wrapped text. The thread is now anchored to an empty range at the end of the selection,
+  which clamps that column to the last row. The faint highlight VSCode paints over a
+  commented range goes with it, since it skips empty ranges. The comment glyph still
+  repeats once per wrapped row; that decoration is VSCode's own and is whole-line.
+
 ## [0.2.0] - 2026-09-05
 
 - Quick action answers are remembered. Running the same text through the same action and

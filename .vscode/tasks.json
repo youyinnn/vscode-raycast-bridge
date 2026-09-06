@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // F5 launches whatever sits in dist/, so a source edit is invisible
+      // until this has run. Wired as the launch config's preLaunchTask.
+      "label": "build extension",
+      "type": "shell",
+      "command": "npm run build",
+      "options": { "cwd": "${workspaceFolder}/vscode" },
+      "problemMatcher": []
+    }
+  ]
+}

@@ -82,7 +82,7 @@ export class AnswerThread implements AnswerSink {
       .filter(Boolean)
       .join(" · ");
     const markdown = target.render !== false;
-    const thread = this.ensureController().createCommentThread(target.uri, target.range, [
+    const thread = this.ensureController().createCommentThread(target.uri, widgetAnchor(target.range), [
       comment(PLACEHOLDER, author, markdown),
     ]);
     // The title bar says which action ran; the author line says which model.
@@ -230,6 +230,25 @@ export class AnswerThread implements AnswerSink {
     this.controller ??= vscode.comments.createCommentController(CONTROLLER_ID, CONTROLLER_NAME);
     return this.controller;
   }
+}
+
+/**
+ * Where the widget hangs: the end of the selection, as an empty range.
+ *
+ * VSCode turns a thread's range into the view zone's `afterColumn` -- the
+ * midpoint of a single-line range, column 1 of a multi-line one -- and a zone
+ * is inserted after the *visual* row that column falls on. With word wrap on
+ * (Option+Z), a whole-line range puts that column halfway along the text, so
+ * the answer lands between the wrapped halves of the line it is answering
+ * about. Collapsing the range to its end pins the column past the last
+ * character, which clamps to the final visual row.
+ *
+ * The price is the faint highlight VSCode paints over a commented range:
+ * `CommentThreadRangeDecorator` skips empty ranges. The line numbers are
+ * unchanged, so dismissal and focus, which read only those, still work.
+ */
+function widgetAnchor(range: vscode.Range): vscode.Range {
+  return new vscode.Range(range.end, range.end);
 }
 
 /**
