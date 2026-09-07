@@ -5,6 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-06
+
+- Quick actions can be reached without selecting anything. Hovering the first line of a
+  paragraph opens a hover offering them, and the code lens follows the cursor's paragraph to
+  offer the same thing above that line. A paragraph is a run of lines with no blank line in it,
+  and both surfaces open with a plain "Lines 4-9" caption: the paragraph was picked for you, so
+  how far it reaches is said out loud before any quota is spent. A selection still wins where
+  there is one, a cursor or pointer on a blank line offers nothing, and the lightbulb is
+  unchanged -- it is still the surface that wants a selection.
+
+- `raycastBridge.quickActionsUI` is a checkbox per surface rather than one of four names. The
+  three surfaces are independent, so naming a combination of them needed a value per combination,
+  and the hover was at first left outside the setting rather than grow it to eight names. It is
+  now an object with a `lightbulb`, `codeLens` and `hover` switch, which the settings editor
+  draws as three checkboxes; turning all three off disables quick actions. A switch left out
+  stays on. The old single values are still understood, so an existing setting keeps working.
+
 ## [0.2.2] - 2026-09-06
 
 - Every quick action answer offers Regenerate, not only one replayed from the cache. A first

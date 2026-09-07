@@ -2,7 +2,7 @@
   "name": "vscode-raycast-bridge",
   "displayName": "Raycast Bridge",
   "description": "Use Raycast AI as a chat model in VS Code, and run Raycast commands and AI quick actions on your selection.",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "publisher": "Jun",
   "license": "MIT",
   "icon": "icon.png",
@@ -195,21 +195,28 @@
           }
         },
         "raycastBridge.quickActionsUI": {
-          "type": "string",
-          "default": "both",
-          "enum": [
-            "both",
-            "lightbulb",
-            "codeLens",
-            "none"
-          ],
-          "enumDescriptions": [
-            "Show both the lightbulb entry and the code lens.",
-            "Lightbulb entry only; costs a second click but never shifts the layout.",
-            "Code lens only; one click, but adds a line above the selection.",
-            "Disable quick actions."
-          ],
-          "description": "Where quick actions appear when text is selected."
+          "type": "object",
+          "default": {
+            "lightbulb": true,
+            "codeLens": true,
+            "hover": true
+          },
+          "properties": {
+            "lightbulb": {
+              "type": "boolean",
+              "description": "A lightbulb entry on the selection. Costs a second click, but never shifts the layout. The only surface that needs a selection."
+            },
+            "codeLens": {
+              "type": "boolean",
+              "description": "A row of buttons above the selection, or above the paragraph the cursor sits in. One click, at the price of an extra line."
+            },
+            "hover": {
+              "type": "boolean",
+              "description": "A hover offering the actions when the pointer rests on a paragraph's first line. Costs no layout and needs no selection, but only the pointer can open it."
+            }
+          },
+          "additionalProperties": false,
+          "description": "Which surfaces offer quick actions. Turn them all off to disable quick actions. The single values this setting used to take -- both, lightbulb, codeLens and none -- are still understood."
         },
         "raycastBridge.quickActionsFocus": {
           "type": "boolean",

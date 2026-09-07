@@ -23,7 +23,12 @@ chooses which models are offered.
 instruction you type.
 
 **Quick actions on the selection.** Select text and a lightbulb entry and a code lens offer
-actions such as *Translate to Chinese*, *Explain* and *Polish as Academic English*. The answer
+actions such as *Translate to Chinese*, *Explain* and *Polish as Academic English*. Neither surface waits
+to be asked: rest the pointer on a paragraph's first line and a hover offers the actions, or put
+the cursor anywhere in the paragraph and the same actions appear as a lens above that line. A
+paragraph is a run of lines with no blank line in it, and both say how far it reaches -- *Lines
+4-9* -- before you spend anything. The lightbulb is the one surface that still wants a
+selection. The answer
 streams in under the selection, or into a hover. Answers render as Markdown; give an
 action `"render": false` to show its answer verbatim instead, which suits rewrites of
 LaTeX or code where Markdown would eat characters or refuse to wrap. An inline answer takes keyboard focus when it
@@ -113,7 +118,7 @@ is what decides which model answers.
 | `raycastBridge.models` | `[]` | Model ids offered in the picker. Edit with `Raycast: Select Chat Models` |
 | `raycastBridge.creativity` | `none` | `none`, `low`, `medium`, `high` or `maximum` |
 | `raycastBridge.quickActions` | three actions | Label, prompt and optional model per action. `{{selection}}` places the text inside the prompt |
-| `raycastBridge.quickActionsUI` | `both` | `both`, `lightbulb`, `codeLens` or `none` |
+| `raycastBridge.quickActionsUI` | all on | A checkbox each for `lightbulb`, `codeLens` and `hover`. All off disables quick actions |
 | `raycastBridge.quickActionsDisplay` | `inline` | `inline` block under the selection, or `hover` |
 | `raycastBridge.quickActionCache` | `true` | Replay a stored answer when the same text, action and model come round again |
 | `raycastBridge.commands` | `[]` | Deeplinks for `Raycast: Run Command`. Copy each one with Raycast's *Copy Deeplink* action |

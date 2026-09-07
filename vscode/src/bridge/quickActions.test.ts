@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_SELECTION_CHARS,
+  parseSurfaces,
   buildQuickPrompt,
   findQuickAction,
   parseQuickActions,
@@ -238,3 +239,49 @@ describe("parseQuickActions cache flag", () => {
     expect(parseQuickActions([{ label: "a", prompt: "p", cache: "no" }])).toEqual([{ label: "a", prompt: "p" }]);
   });
 });
+
+describe("parseSurfaces", () => {
+  it("reads an object of switches", () => {
+    expect(parseSurfaces({ lightbulb: true, codeLens: false, hover: true })).toEqual({
+      lightbulb: true,
+      codeLens: false,
+      hover: true,
+    });
+  });
+
+  it("leaves a surface the object does not mention switched on", () => {
+    expect(parseSurfaces({ hover: false })).toEqual({
+      lightbulb: true,
+      codeLens: true,
+      hover: false,
+    });
+  });
+
+  it("shows everything for an empty object", () => {
+    expect(parseSurfaces({})).toEqual({ lightbulb: true, codeLens: true, hover: true });
+  });
+
+  it("shows everything when the setting is missing", () => {
+    expect(parseSurfaces(undefined)).toEqual({ lightbulb: true, codeLens: true, hover: true });
+  });
+
+  it("shows nothing when every switch is off", () => {
+    expect(parseSurfaces({ lightbulb: false, codeLens: false, hover: false })).toEqual({
+      lightbulb: false,
+      codeLens: false,
+      hover: false,
+    });
+  });
+
+  it("still understands the old 'both', which predates the hover", () => {
+    expect(parseSurfaces("both")).toEqual({ lightbulb: true, codeLens: true, hover: true });
+  });
+
+  it("still understands an old single surface, and adds nothing to it", () => {
+    expect(parseSurfaces("lightbulb")).toEqual({ lightbulb: true, codeLens: false, hover: false });
+  });
+
+  it("still understands the old 'none'", () => {
+    expect(parseSurfaces("none")).toEqual({ lightbulb: false, codeLens: false, hover: false });
+  });
+})

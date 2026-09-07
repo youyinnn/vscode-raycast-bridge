@@ -136,3 +136,44 @@ export function setQuickActionModel(raw: unknown, index: number, model: string |
     return model ? { ...rest, model } : rest;
   });
 }
+
+/** Where quick actions offer themselves. Each one is independent of the others. */
+export type Surfaces = { lightbulb: boolean; codeLens: boolean; hover: boolean };
+
+const SURFACES = ["lightbulb", "codeLens", "hover"] as const;
+
+/**
+ * Reads the `quickActionsUI` setting.
+ *
+ * An object of switches, because the three surfaces are independent: as one
+ * enum it needed a value per combination, and the hover was at first left
+ * outside the setting rather than grow it to eight names. Three boolean
+ * properties and `additionalProperties: false` are what make VSCode's settings
+ * editor draw three checkboxes instead of sending the reader to settings.json.
+ *
+ * A switch the object leaves out stays on, so turning one surface off is one
+ * line rather than three.
+ *
+ * The single strings the setting used to hold are still understood, so an
+ * upgrade does not silently change what is on screen. `both` grows to include
+ * the hover -- it read as "do not restrict me" -- while a value that named
+ * one surface stays that one surface, which is what it asked for.
+ */
+export function parseSurfaces(value: unknown): Surfaces {
+  if (typeof value === "object" && value !== null) {
+    const switches = value as Record<string, unknown>;
+    return {
+      lightbulb: switches.lightbulb !== false,
+      codeLens: switches.codeLens !== false,
+      hover: switches.hover !== false,
+    };
+  }
+  if (value === "none") {
+    return { lightbulb: false, codeLens: false, hover: false };
+  }
+  if (typeof value === "string" && (SURFACES as readonly string[]).includes(value)) {
+    return { lightbulb: value === "lightbulb", codeLens: value === "codeLens", hover: value === "hover" };
+  }
+  // `both` and anything unrecognised, including the setting being absent.
+  return { lightbulb: true, codeLens: true, hover: true };
+}

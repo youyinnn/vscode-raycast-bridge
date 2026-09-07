@@ -1,14 +1,23 @@
 import * as vscode from "vscode";
 import { askRaycast } from "../bridge/ask";
 import { cacheableSelection } from "../bridge/answerCache";
+import { commandUri, markdownLink } from "../bridge/markdown";
 import {
   buildQuickPrompt,
   findQuickAction,
   parseQuickActions,
+  parseSurfaces,
   quickActionModelLabel,
   type QuickAction,
+  type Surfaces,
 } from "../bridge/quickActions";
-import { selectionOrCursorLine, type RangeTuple } from "../bridge/selectionTarget";
+import {
+  lineRangeLabel,
+  paragraphAround,
+  selectionOrCursorLine,
+  type DocumentLines,
+  type RangeTuple,
+} from "../bridge/selectionTarget";
 import type { BridgeServer } from "../bridge/server";
 import type { AnswerCacheStore } from "./answerCacheStore";
 import type { AnswerSink } from "./answerSink";
@@ -59,6 +68,7 @@ export function registerQuickActions(context: vscode.ExtensionContext, deps: Qui
       providedCodeActionKinds: [vscode.CodeActionKind.RefactorRewrite],
     }),
     vscode.languages.registerCodeLensProvider("*", provider),
+    vscode.languages.registerHoverProvider("*", provider),
     vscode.commands.registerCommand(RUN_COMMAND, (args: RunArgs | KeyArgs | undefined) =>
       isKeyArgs(args) ? runByLabel(args.action, deps) : run(args as RunArgs, deps),
     ),
@@ -71,11 +81,14 @@ export function registerQuickActions(context: vscode.ExtensionContext, deps: Qui
 }
 
 /**
- * Offers the configured quick actions on the current selection, as both a
- * lightbulb entry and a code lens. Which of the two appear is a setting; the
- * action list behind them is the same.
+ * Offers the configured quick actions as both a lightbulb entry and a code
+ * lens. Which of the two appear is a setting; the action list behind them is
+ * the same. The lightbulb always waits for a selection; the lens also follows
+ * the cursor's paragraph.
  */
-class QuickActionProvider implements vscode.CodeActionProvider, vscode.CodeLensProvider, vscode.Disposable {
+class QuickActionProvider
+  implements vscode.CodeActionProvider, vscode.CodeLensProvider, vscode.HoverProvider, vscode.Disposable
+{
   private readonly changed = new vscode.EventEmitter<void>();
   readonly onDidChangeCodeLenses = this.changed.event;
   private refresh: ReturnType<typeof setTimeout> | undefined;
@@ -119,20 +132,66 @@ class QuickActionProvider implements vscode.CodeActionProvider, vscode.CodeLensP
     if (!surfaces().codeLens || !editor || editor.document.uri.toString() !== document.uri.toString()) {
       return [];
     }
-    const { selection } = editor;
-    if (selection.isEmpty) {
+    const target = lensTarget(editor);
+    if (!target) {
       return [];
     }
     // Lenses sharing one empty range render side by side on the row above it.
-    const anchor = new vscode.Range(selection.start, selection.start);
-    return quickActions().map(
+    const anchor = new vscode.Range(target.start, target.start);
+    const lenses = quickActions().map(
       (action, index) =>
         new vscode.CodeLens(anchor, {
           command: RUN_COMMAND,
           title: action.label,
-          arguments: [runArgs(index, document.uri, selection)],
+          arguments: [runArgs(index, document.uri, target)],
         }),
     );
+    // A paragraph was picked for the reader, so the row opens by saying how
+    // far it reaches; a selection draws its own extent and needs no caption.
+    // The empty command id is what makes this one plain text: VSCode renders a
+    // lens as a link only when its command has an id, and as a span otherwise.
+    // Nothing to caption if no action is configured.
+    if (editor.selection.isEmpty && lenses.length) {
+      lenses.unshift(new vscode.CodeLens(anchor, { command: "", title: lineRangeLabel(tuple(target)) }));
+    }
+    return lenses;
+  }
+
+  /**
+   * The hover: resting the pointer on a paragraph's first line offers the
+   * actions for the whole paragraph, with no selection and no click to open a
+   * menu.
+   *
+   * Only the first line answers. A hover on every line of the paragraph would
+   * pop open all the way down it as the mouse crosses the text being read,
+   * and the first line is where the code lens already puts the same offer.
+   *
+   * `isTrusted` is scoped to the one command these links call. Blanket trust
+   * would let any `command:` link elsewhere in a hover run anything in VSCode.
+   */
+  provideHover(document: vscode.TextDocument, position: vscode.Position): vscode.Hover | undefined {
+    const actions = quickActions();
+    if (!surfaces().hover || !actions.length) {
+      return undefined;
+    }
+    const paragraph = paragraphAround(position.line, documentLines(document));
+    if (!paragraph || paragraph[0] !== position.line) {
+      return undefined;
+    }
+    const range = new vscode.Range(...paragraph);
+    const content = new vscode.MarkdownString();
+    content.isTrusted = { enabledCommands: [RUN_COMMAND] };
+    content.appendMarkdown(
+      [
+        lineRangeLabel(paragraph),
+        ...actions.map((action, index) =>
+          markdownLink(action.label, commandUri(RUN_COMMAND, runArgs(index, document.uri, range))),
+        ),
+      ].join(" · "),
+    );
+    // Anchored to the hovered line rather than the paragraph: VSCode underlines
+    // the hover's range, and underlining the whole paragraph reads as an error.
+    return new vscode.Hover(content, document.lineAt(position.line).range);
   }
 
   dispose(): void {
@@ -170,8 +229,11 @@ async function runByLabel(label: unknown, deps: QuickActionDeps): Promise<void> 
     return;
   }
   // With nothing selected the line the cursor is on is what the key press
-  // meant. The lightbulb and the code lens still ask for a real selection:
-  // both would otherwise offer themselves on every line of every file.
+  // meant. Narrower than the lens, which widens to the paragraph: a key press
+  // is aimed, and widening it past what the reader is looking at would send
+  // text to Raycast that nobody asked about. The lightbulb still asks for a
+  // real selection; it would otherwise offer itself on every line of every
+  // file.
   const line = editor.document.lineAt(editor.selection.start.line);
   const range = selectionOrCursorLine(tuple(editor.selection), line.text.length);
   if (!editor.document.getText(new vscode.Range(...range)).trim()) {
@@ -301,10 +363,38 @@ function display(sinks: AnswerSinks): AnswerSink {
   return mode === "hover" ? sinks.hover : sinks.inline;
 }
 
-function surfaces(): { lightbulb: boolean; codeLens: boolean } {
-  const mode = vscode.workspace.getConfiguration("raycastBridge").get<string>("quickActionsUI") ?? "both";
+/**
+ * The text the lens offers itself on: the selection, or the paragraph the
+ * cursor sits in.
+ *
+ * Following the cursor is what lets the lens be reached without selecting
+ * anything first, in every file rather than in a listed few. Gating it by
+ * language was a guess at when the row of buttons would be unwelcome, and a
+ * guess that decides invisibly whether a feature exists is worse than the
+ * noise it saves: anyone who does not want the lens has
+ * `raycastBridge.quickActionsUI` to say so outright.
+ *
+ * A selection still wins where there is one. That keeps this the same promise
+ * `selectionOrCursorLine` makes on the keybinding path -- act on what is
+ * selected, and guess only when nothing is -- with the guess widened from the
+ * line to the paragraph.
+ */
+function lensTarget(editor: vscode.TextEditor): vscode.Range | undefined {
+  if (!editor.selection.isEmpty) {
+    return editor.selection;
+  }
+  const paragraph = paragraphAround(editor.selection.active.line, documentLines(editor.document));
+  return paragraph && new vscode.Range(...paragraph);
+}
+
+function documentLines(document: vscode.TextDocument): DocumentLines {
   return {
-    lightbulb: mode === "both" || mode === "lightbulb",
-    codeLens: mode === "both" || mode === "codeLens",
+    count: document.lineCount,
+    isBlank: (line) => document.lineAt(line).isEmptyOrWhitespace,
+    lengthOf: (line) => document.lineAt(line).text.length,
   };
+}
+
+function surfaces(): Surfaces {
+  return parseSurfaces(vscode.workspace.getConfiguration("raycastBridge").get("quickActionsUI"));
 }

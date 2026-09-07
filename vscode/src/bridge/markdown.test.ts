@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { preserveLineBreaks } from "./markdown";
+import { commandUri, markdownLink, preserveLineBreaks } from "./markdown";
 
 describe("preserveLineBreaks", () => {
   it("leaves text without newlines alone", () => {
@@ -44,3 +44,33 @@ describe("preserveLineBreaks", () => {
     expect(preserveLineBreaks("a\n")).toBe("a\n");
   });
 });
+
+describe("commandUri", () => {
+  it("encodes the argument list so VSCode hands it back unchanged", () => {
+    const args = { index: 2, uri: "file:///a b.md", range: [3, 0, 8, 4] };
+    const uri = commandUri("raycastBridge.quickAction", args);
+
+    const [scheme, query] = uri.split("?");
+    expect(scheme).toBe("command:raycastBridge.quickAction");
+    expect(JSON.parse(decodeURIComponent(query))).toEqual([args]);
+  });
+
+  it("percent-encodes the characters that would end the link early", () => {
+    const uri = commandUri("cmd", { label: 'a "b" (c) d' });
+
+    expect(uri).not.toContain('"');
+    expect(uri).not.toContain("(");
+    expect(uri).not.toContain(")");
+    expect(uri).not.toContain(" ");
+  });
+})
+
+describe("markdownLink", () => {
+  it("writes a link", () => {
+    expect(markdownLink("Explain", "command:x")).toBe("[Explain](command:x)");
+  });
+
+  it("escapes brackets in the text, which would otherwise end the link early", () => {
+    expect(markdownLink("Translate [zh]", "command:x")).toBe("[Translate \\[zh\\]](command:x)");
+  });
+})
